@@ -18,6 +18,10 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Frontend & Node artifacts
+node_modules/
+dist/
+
 # Processing output and local test scans
 /output/
 /scans/
