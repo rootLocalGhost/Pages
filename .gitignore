@@ -1,0 +1,25 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*~
+.fleet/
+*.sublime-project
+*.sublime-workspace
+
+# Operating System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Processing output and local test scans
+/output/
+/scans/
+project.json
+*.project.json
