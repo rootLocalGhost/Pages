@@ -1,0 +1,12 @@
+[package]
+name = "scantailor-math"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+approx = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+approx.workspace = true
