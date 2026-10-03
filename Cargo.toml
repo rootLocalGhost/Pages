@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/scantailor-math",
+    "crates/scantailor-imageproc",
+    "crates/scantailor-dewarp",
+    "crates/scantailor-core",
+    "crates/scantailor-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Scan Tailor Universal Contributors"]
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+thiserror = "1.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rayon = "1.10"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff"] }
+clap = { version = "4.5", features = ["derive"] }
+approx = "0.5"
