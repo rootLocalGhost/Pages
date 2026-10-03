@@ -37,39 +37,50 @@ impl BatchProcessor {
     pub fn process_project(
         project: &Project,
         on_progress: Option<&(dyn Fn(usize, usize) + Send + Sync)>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Vec<PathBuf>> {
         std::fs::create_dir_all(&project.output_directory)?;
 
         let total = project.pages.len();
         let completed = std::sync::atomic::AtomicUsize::new(0);
 
-        project.pages.par_iter().try_for_each(|page_settings| {
-            let img = image::open(&page_settings.source_path)
-                .with_context(|| format!("Failed to open {:?}", page_settings.source_path))?;
+        let page_results: Vec<anyhow::Result<Vec<PathBuf>>> = project
+            .pages
+            .par_iter()
+            .map(|page_settings| {
+                let img = image::open(&page_settings.source_path)
+                    .with_context(|| format!("Failed to open {:?}", page_settings.source_path))?;
 
-            let processed_pages = Pipeline::process_image(img, page_settings)
-                .with_context(|| format!("Failed processing {:?}", page_settings.source_path))?;
+                let processed_pages = Pipeline::process_image(img, page_settings)
+                    .with_context(|| format!("Failed processing {:?}", page_settings.source_path))?;
 
-            for p in processed_pages {
-                let out_filename = format!("page_{:04}.png", p.page_number);
-                let out_path = project.output_directory.join(out_filename);
+                let mut page_outputs = Vec::new();
+                for p in processed_pages {
+                    let out_filename = format!("page_{:04}.png", p.page_number);
+                    let out_path = project.output_directory.join(out_filename);
 
-                if let Some(bin) = &p.binary_image {
-                    let gray = bin.to_gray_image();
-                    gray.save(&out_path)?;
-                } else if let Some(gray) = &p.gray_image {
-                    gray.save(&out_path)?;
+                    if let Some(bin) = &p.binary_image {
+                        let gray = bin.to_gray_image();
+                        gray.save(&out_path)?;
+                    } else if let Some(gray) = &p.gray_image {
+                        gray.save(&out_path)?;
+                    }
+                    page_outputs.push(out_path);
                 }
-            }
 
-            let cur = completed.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-            if let Some(callback) = on_progress {
-                callback(cur, total);
-            }
+                let cur = completed.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                if let Some(callback) = on_progress {
+                    callback(cur, total);
+                }
 
-            Ok::<(), anyhow::Error>(())
-        })?;
+                Ok(page_outputs)
+            })
+            .collect();
 
-        Ok(())
+        let mut all_paths = Vec::new();
+        for res in page_results {
+            all_paths.extend(res?);
+        }
+        all_paths.sort();
+        Ok(all_paths)
     }
 }
