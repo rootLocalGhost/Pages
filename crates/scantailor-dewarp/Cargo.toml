@@ -1,0 +1,13 @@
+[package]
+name = "scantailor-dewarp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+scantailor-math = { path = "../scantailor-math" }
+scantailor-imageproc = { path = "../scantailor-imageproc" }
+image.workspace = true
+rayon.workspace = true
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
