@@ -1,0 +1,15 @@
+[package]
+name = "scantailor-imageproc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+scantailor-math = { path = "../scantailor-math" }
+image.workspace = true
+rayon.workspace = true
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+approx.workspace = true
