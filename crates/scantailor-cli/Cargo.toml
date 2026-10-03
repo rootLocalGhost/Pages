@@ -10,3 +10,5 @@ scantailor-imageproc = { path = "../scantailor-imageproc" }
 clap = { workspace = true, features = ["derive"] }
 image.workspace = true
 anyhow.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
