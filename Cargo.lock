@@ -389,6 +389,8 @@ dependencies = [
  "image",
  "scantailor-core",
  "scantailor-imageproc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
