@@ -1,0 +1,36 @@
+[package]
+name = "scantailor-gui"
+version = "0.2.0"
+description = "ScanTailor-Next Desktop GUI Application"
+edition = "2021"
+authors = ["Scan Tailor Universal Contributors"]
+license = "GPL-3.0-or-later"
+
+[lib]
+name = "scantailor_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "scantailor-next"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true }
+image = { workspace = true }
+scantailor-core = { path = "../crates/scantailor-core" }
+scantailor-imageproc = { path = "../crates/scantailor-imageproc" }
+scantailor-dewarp = { path = "../crates/scantailor-dewarp" }
+scantailor-math = { path = "../crates/scantailor-math" }
+base64 = "0.22"
+num_cpus = "1.16"
+tokio = { version = "1", features = ["full"] }
