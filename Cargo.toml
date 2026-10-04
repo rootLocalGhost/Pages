@@ -6,6 +6,7 @@ members = [
     "crates/scantailor-dewarp",
     "crates/scantailor-core",
     "crates/scantailor-cli",
+    "src-tauri",
 ]
 exclude = [
     "ScanSmith-AI/src-tauri",
