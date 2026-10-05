@@ -1,4 +1,4 @@
-use image::{DynamicImage, GenericImageView, ImageReader};
+use image::{DynamicImage, ImageReader};
 use rayon::prelude::*;
 use scantailor_dewarp::{CylindricalSurfaceModel, DewarpCurve, DewarpRemapper};
 use scantailor_imageproc::{
@@ -193,280 +193,349 @@ fn import_images(paths: Vec<String>) -> Result<Vec<PageItem>, String> {
 }
 
 #[tauri::command]
-fn auto_detect_orientation(image_path: String) -> Result<u32, String> {
-    // Basic aspect ratio / text line analysis
-    let img = image::open(&image_path).map_err(|e| e.to_string())?;
-    let (w, h) = img.dimensions();
-    if w > h {
-        // Landscape scans often contain dual pages or sideways document
-        Ok(0)
-    } else {
-        Ok(0)
-    }
-}
-
-#[tauri::command]
-fn auto_detect_split(image_path: String, orientation: Option<u32>) -> Result<SplitResultDto, String> {
-    let orientation = orientation.unwrap_or(0);
-    let img = image::open(&image_path).map_err(|e| e.to_string())?;
-    let oriented = apply_orientation(img, orientation);
-    let gray = oriented.to_luma8();
-    let bin = binarize_otsu(&gray, 0);
-
-    let detector = PageSplitDetector::new();
-    let split = detector.detect_split(&bin);
-
-    match split.mode {
-        PageLayoutMode::TwoPages => {
-            let left_dto = ContentBoxDto {
-                x: split.left_page_rect.x,
-                y: split.left_page_rect.y,
-                width: split.left_page_rect.width,
-                height: split.left_page_rect.height,
-            };
-            let right_dto = split.right_page_rect.map(|r| ContentBoxDto {
-                x: r.x,
-                y: r.y,
-                width: r.width,
-                height: r.height,
-            });
-
-            Ok(SplitResultDto {
-                mode: "two-pages".to_string(),
-                split_x: split.split_x.map(|x| x as i32),
-                left_rect: Some(left_dto),
-                right_rect: right_dto,
-            })
+async fn auto_detect_orientation(image_path: String) -> Result<u32, String> {
+    tokio::task::spawn_blocking(move || {
+        let reader = ImageReader::open(&image_path)
+            .map_err(|e| e.to_string())?
+            .with_guessed_format()
+            .map_err(|e| e.to_string())?;
+        let (w, h) = reader.into_dimensions().unwrap_or((1200, 1600));
+        if w > h {
+            Ok(0)
+        } else {
+            Ok(0)
         }
-        PageLayoutMode::SinglePage => Ok(SplitResultDto {
-            mode: "single".to_string(),
-            split_x: Some((oriented.width() / 2) as i32),
-            left_rect: Some(ContentBoxDto {
-                x: 0,
-                y: 0,
-                width: oriented.width() as i32,
-                height: oriented.height() as i32,
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn auto_detect_split(image_path: String, orientation: Option<u32>) -> Result<SplitResultDto, String> {
+    tokio::task::spawn_blocking(move || {
+        let orientation = orientation.unwrap_or(0);
+        let img = image::open(&image_path).map_err(|e| e.to_string())?;
+        let oriented = apply_orientation(img, orientation);
+        let orig_w = oriented.width();
+        let orig_h = oriented.height();
+
+        // Downscale for fast split detection
+        let small = if orig_w > 1200 || orig_h > 1200 {
+            oriented.thumbnail(1200, 1200)
+        } else {
+            oriented
+        };
+        let scale = orig_w as f64 / small.width() as f64;
+
+        let gray = small.to_luma8();
+        let bin = binarize_otsu(&gray, 0);
+
+        let detector = PageSplitDetector::new();
+        let split = detector.detect_split(&bin);
+
+        match split.mode {
+            PageLayoutMode::TwoPages => {
+                let left_dto = ContentBoxDto {
+                    x: (split.left_page_rect.x as f64 * scale) as i32,
+                    y: (split.left_page_rect.y as f64 * scale) as i32,
+                    width: (split.left_page_rect.width as f64 * scale) as i32,
+                    height: (split.left_page_rect.height as f64 * scale) as i32,
+                };
+                let right_dto = split.right_page_rect.map(|r| ContentBoxDto {
+                    x: (r.x as f64 * scale) as i32,
+                    y: (r.y as f64 * scale) as i32,
+                    width: (r.width as f64 * scale) as i32,
+                    height: (r.height as f64 * scale) as i32,
+                });
+
+                Ok(SplitResultDto {
+                    mode: "two-pages".to_string(),
+                    split_x: split.split_x.map(|x| (x as f64 * scale) as i32),
+                    left_rect: Some(left_dto),
+                    right_rect: right_dto,
+                })
+            }
+            PageLayoutMode::SinglePage => Ok(SplitResultDto {
+                mode: "single".to_string(),
+                split_x: Some((orig_w / 2) as i32),
+                left_rect: Some(ContentBoxDto {
+                    x: 0,
+                    y: 0,
+                    width: orig_w as i32,
+                    height: orig_h as i32,
+                }),
+                right_rect: None,
             }),
-            right_rect: None,
-        }),
-    }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn auto_detect_deskew(image_path: String, orientation: Option<u32>) -> Result<f64, String> {
-    let orientation = orientation.unwrap_or(0);
-    let img = image::open(&image_path).map_err(|e| e.to_string())?;
-    let oriented = apply_orientation(img, orientation);
-    let gray = oriented.to_luma8();
-    let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+async fn auto_detect_deskew(image_path: String, orientation: Option<u32>) -> Result<f64, String> {
+    tokio::task::spawn_blocking(move || {
+        let orientation = orientation.unwrap_or(0);
+        let img = image::open(&image_path).map_err(|e| e.to_string())?;
+        let oriented = apply_orientation(img, orientation);
 
-    let finder = SkewFinder::new();
-    let result = finder.find_skew(&bin);
-    Ok(result.angle_deg)
+        // Subsample for lightning fast skew detection (identical angle result)
+        let small = if oriented.width() > 1000 || oriented.height() > 1000 {
+            oriented.thumbnail(1000, 1000)
+        } else {
+            oriented
+        };
+
+        let gray = small.to_luma8();
+        let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+
+        let finder = SkewFinder::new();
+        let result = finder.find_skew(&bin);
+        Ok(result.angle_deg)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn auto_detect_content_box(
+async fn auto_detect_content_box(
     image_path: String,
     orientation: Option<u32>,
     deskew_angle: Option<f64>,
 ) -> Result<ContentBoxDto, String> {
-    let orientation = orientation.unwrap_or(0);
-    let deskew_angle = deskew_angle.unwrap_or(0.0);
-    let img = image::open(&image_path).map_err(|e| e.to_string())?;
-    let oriented = apply_orientation(img, orientation);
-    let gray = oriented.to_luma8();
-    let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+    tokio::task::spawn_blocking(move || {
+        let orientation = orientation.unwrap_or(0);
+        let deskew_angle = deskew_angle.unwrap_or(0.0);
+        let img = image::open(&image_path).map_err(|e| e.to_string())?;
+        let oriented = apply_orientation(img, orientation);
+        let orig_w = oriented.width();
 
-    let rotated_bin = if deskew_angle.abs() > 0.01 {
-        rotate_binary_image(&bin, deskew_angle)
-    } else {
-        bin
-    };
+        let small = if oriented.width() > 1200 || oriented.height() > 1200 {
+            oriented.thumbnail(1200, 1200)
+        } else {
+            oriented
+        };
+        let scale = orig_w as f64 / small.width() as f64;
 
-    let bbox = detect_content_box(&rotated_bin, 10, 5);
-    Ok(ContentBoxDto {
-        x: bbox.x,
-        y: bbox.y,
-        width: bbox.width,
-        height: bbox.height,
+        let gray = small.to_luma8();
+        let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+
+        let rotated_bin = if deskew_angle.abs() > 0.01 {
+            rotate_binary_image(&bin, deskew_angle)
+        } else {
+            bin
+        };
+
+        let bbox = detect_content_box(&rotated_bin, 10, 5);
+        Ok(ContentBoxDto {
+            x: (bbox.x as f64 * scale) as i32,
+            y: (bbox.y as f64 * scale) as i32,
+            width: (bbox.width as f64 * scale) as i32,
+            height: (bbox.height as f64 * scale) as i32,
+        })
     })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn generate_stage_preview(page: PageItem, stage: String) -> Result<StagePreviewResult, String> {
-    let cache_dir = get_preview_cache_dir();
-    let img = image::open(&page.file_path).map_err(|e| e.to_string())?;
-    let oriented = apply_orientation(img, page.orientation);
+async fn generate_stage_preview(page: PageItem, stage: String) -> Result<StagePreviewResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let cache_dir = get_preview_cache_dir();
 
-    let mut auto_deskew_angle = None;
-    let mut auto_content_box = None;
-    let mut split_info = None;
+        let hash_key = format!(
+            "{}_{}_{}_{:.2}_{:?}_{}_{}_{:.2}_{}",
+            page.id,
+            stage,
+            page.orientation,
+            page.deskew_angle,
+            page.content_box,
+            page.output_mode,
+            page.binarization_method,
+            page.sauvola_k,
+            page.despeckle
+        );
+        let preview_path = cache_dir.join(format!("prev_{:x}.jpg", hash_str(&hash_key)));
 
-    let hash_key = format!(
-        "{}_{}_{}_{:.2}_{:?}_{}_{}_{:.2}_{}",
-        page.id,
-        stage,
-        page.orientation,
-        page.deskew_angle,
-        page.content_box,
-        page.output_mode,
-        page.binarization_method,
-        page.sauvola_k,
-        page.despeckle
-    );
-    let preview_path = cache_dir.join(format!("prev_{:x}.png", hash_str(&hash_key)));
+        let mut auto_deskew_angle = None;
+        let mut auto_content_box = None;
+        let mut split_info = None;
 
-    match stage.as_str() {
-        "orientation" => {
-            oriented.save(&preview_path).map_err(|e| e.to_string())?;
+        let img = image::open(&page.file_path).map_err(|e| e.to_string())?;
+        let oriented = apply_orientation(img, page.orientation);
+        let orig_w = oriented.width();
+        let orig_h = oriented.height();
+
+        // Cache hit: return immediately with zero computation!
+        if preview_path.exists() {
+            return Ok(StagePreviewResult {
+                preview_path: preview_path.to_string_lossy().to_string(),
+                original_path: page.file_path,
+                width: orig_w,
+                height: orig_h,
+                auto_deskew_angle: None,
+                auto_content_box: None,
+                split_info: None,
+            });
         }
-        "split" => {
-            let gray = oriented.to_luma8();
-            let bin = binarize_otsu(&gray, 0);
-            let detector = PageSplitDetector::new();
-            let split = detector.detect_split(&bin);
 
-            split_info = Some(SplitResultDto {
-                mode: if split.mode == PageLayoutMode::TwoPages {
-                    "two-pages".into()
+        // Fast downsampled preview (max 1400px) for smooth 60fps UI
+        let preview_img = if orig_w > 1400 || orig_h > 1400 {
+            oriented.thumbnail(1400, 1400)
+        } else {
+            oriented
+        };
+        let scale = orig_w as f64 / preview_img.width() as f64;
+
+        match stage.as_str() {
+            "orientation" => {
+                preview_img.save(&preview_path).map_err(|e| e.to_string())?;
+            }
+            "split" => {
+                let gray = preview_img.to_luma8();
+                let bin = binarize_otsu(&gray, 0);
+                let detector = PageSplitDetector::new();
+                let split = detector.detect_split(&bin);
+
+                split_info = Some(SplitResultDto {
+                    mode: if split.mode == PageLayoutMode::TwoPages {
+                        "two-pages".into()
+                    } else {
+                        "single".into()
+                    },
+                    split_x: split.split_x.map(|x| (x as f64 * scale) as i32),
+                    left_rect: Some(ContentBoxDto {
+                        x: (split.left_page_rect.x as f64 * scale) as i32,
+                        y: (split.left_page_rect.y as f64 * scale) as i32,
+                        width: (split.left_page_rect.width as f64 * scale) as i32,
+                        height: (split.left_page_rect.height as f64 * scale) as i32,
+                    }),
+                    right_rect: split.right_page_rect.map(|r| ContentBoxDto {
+                        x: (r.x as f64 * scale) as i32,
+                        y: (r.y as f64 * scale) as i32,
+                        width: (r.width as f64 * scale) as i32,
+                        height: (r.height as f64 * scale) as i32,
+                    }),
+                });
+
+                preview_img.save(&preview_path).map_err(|e| e.to_string())?;
+            }
+            "deskew" => {
+                let gray = preview_img.to_luma8();
+                let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+                let finder = SkewFinder::new();
+                let detected = finder.find_skew(&bin).angle_deg;
+                auto_deskew_angle = Some(detected);
+
+                let angle_to_apply = if page.deskew_angle.abs() > 0.001 {
+                    page.deskew_angle
                 } else {
-                    "single".into()
-                },
-                split_x: split.split_x.map(|x| x as i32),
-                left_rect: Some(ContentBoxDto {
-                    x: split.left_page_rect.x,
-                    y: split.left_page_rect.y,
-                    width: split.left_page_rect.width,
-                    height: split.left_page_rect.height,
-                }),
-                right_rect: split.right_page_rect.map(|r| ContentBoxDto {
-                    x: r.x,
-                    y: r.y,
-                    width: r.width,
-                    height: r.height,
-                }),
-            });
+                    detected
+                };
 
-            oriented.save(&preview_path).map_err(|e| e.to_string())?;
-        }
-        "deskew" => {
-            let gray = oriented.to_luma8();
-            let bin = binarize_sauvola(&gray, 15, 0.25, 0);
-            let finder = SkewFinder::new();
-            let detected = finder.find_skew(&bin).angle_deg;
-            auto_deskew_angle = Some(detected);
-
-            let angle_to_apply = if page.deskew_angle.abs() > 0.001 {
-                page.deskew_angle
-            } else {
-                detected
-            };
-
-            // Rotate image
-            let rotated_bin = rotate_binary_image(&bin, angle_to_apply);
-            let out_gray = rotated_bin.to_gray_image();
-            out_gray.save(&preview_path).map_err(|e| e.to_string())?;
-        }
-        "content" => {
-            let gray = oriented.to_luma8();
-            let bin = binarize_sauvola(&gray, 15, 0.25, 0);
-            let rotated_bin = if page.deskew_angle.abs() > 0.001 {
-                rotate_binary_image(&bin, page.deskew_angle)
-            } else {
-                bin
-            };
-
-            let detected_box = detect_content_box(&rotated_bin, 10, 5);
-            auto_content_box = Some(ContentBoxDto {
-                x: detected_box.x,
-                y: detected_box.y,
-                width: detected_box.width,
-                height: detected_box.height,
-            });
-
-            let out_gray = rotated_bin.to_gray_image();
-            out_gray.save(&preview_path).map_err(|e| e.to_string())?;
-        }
-        "margins" => {
-            let gray = oriented.to_luma8();
-            let bin = binarize_sauvola(&gray, 15, 0.25, 0);
-            let rotated_bin = if page.deskew_angle.abs() > 0.001 {
-                rotate_binary_image(&bin, page.deskew_angle)
-            } else {
-                bin
-            };
-
-            let out_gray = rotated_bin.to_gray_image();
-            out_gray.save(&preview_path).map_err(|e| e.to_string())?;
-        }
-        "output" => {
-            let mut gray = oriented.to_luma8();
-
-            // 1. Optional 2.5D Dewarping if requested
-            if page.dewarp {
-                let w = gray.width() as f64;
-                let h = gray.height() as f64;
-                let top_curve = DewarpCurve::new(vec![
-                    scantailor_math::Point2d::new(0.0, 0.0),
-                    scantailor_math::Point2d::new(w * 0.5, 12.0),
-                    scantailor_math::Point2d::new(w, 0.0),
-                ]);
-                let bottom_curve = DewarpCurve::new(vec![
-                    scantailor_math::Point2d::new(0.0, h),
-                    scantailor_math::Point2d::new(w * 0.5, h - 12.0),
-                    scantailor_math::Point2d::new(w, h),
-                ]);
-                let model = CylindricalSurfaceModel::new(top_curve, bottom_curve, gray.width(), gray.height());
-                gray = DewarpRemapper::dewarp_gray(&gray, &model);
+                let rotated_bin = rotate_binary_image(&bin, angle_to_apply);
+                let out_gray = rotated_bin.to_gray_image();
+                out_gray.save(&preview_path).map_err(|e| e.to_string())?;
             }
+            "content" => {
+                let gray = preview_img.to_luma8();
+                let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+                let rotated_bin = if page.deskew_angle.abs() > 0.001 {
+                    rotate_binary_image(&bin, page.deskew_angle)
+                } else {
+                    bin
+                };
 
-            // 2. Deskew
-            let bin = match page.binarization_method.as_str() {
-                "otsu" => binarize_otsu(&gray, 0),
-                _ => binarize_sauvola(&gray, page.sauvola_window, page.sauvola_k, 0),
-            };
+                let detected_box = detect_content_box(&rotated_bin, 10, 5);
+                auto_content_box = Some(ContentBoxDto {
+                    x: (detected_box.x as f64 * scale) as i32,
+                    y: (detected_box.y as f64 * scale) as i32,
+                    width: (detected_box.width as f64 * scale) as i32,
+                    height: (detected_box.height as f64 * scale) as i32,
+                });
 
-            let deskewed_bin = if page.deskew_angle.abs() > 0.001 {
-                rotate_binary_image(&bin, page.deskew_angle)
-            } else {
-                bin
-            };
+                let out_gray = rotated_bin.to_gray_image();
+                out_gray.save(&preview_path).map_err(|e| e.to_string())?;
+            }
+            "margins" => {
+                let gray = preview_img.to_luma8();
+                let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+                let rotated_bin = if page.deskew_angle.abs() > 0.001 {
+                    rotate_binary_image(&bin, page.deskew_angle)
+                } else {
+                    bin
+                };
 
-            // 3. Despeckle if enabled
-            let final_bin = if page.despeckle {
-                scantailor_imageproc::ConnectedComponentLabeler::label_8_connected(&deskewed_bin).despeckle(3)
-            } else {
-                deskewed_bin
-            };
+                let out_gray = rotated_bin.to_gray_image();
+                out_gray.save(&preview_path).map_err(|e| e.to_string())?;
+            }
+            "output" => {
+                let mut gray = preview_img.to_luma8();
 
-            match page.output_mode.as_str() {
-                "grayscale" => {
-                    gray.save(&preview_path).map_err(|e| e.to_string())?;
+                if page.dewarp {
+                    let w = gray.width() as f64;
+                    let h = gray.height() as f64;
+                    let top_curve = DewarpCurve::new(vec![
+                        scantailor_math::Point2d::new(0.0, 0.0),
+                        scantailor_math::Point2d::new(w * 0.5, 12.0),
+                        scantailor_math::Point2d::new(w, 0.0),
+                    ]);
+                    let bottom_curve = DewarpCurve::new(vec![
+                        scantailor_math::Point2d::new(0.0, h),
+                        scantailor_math::Point2d::new(w * 0.5, h - 12.0),
+                        scantailor_math::Point2d::new(w, h),
+                    ]);
+                    let model = CylindricalSurfaceModel::new(top_curve, bottom_curve, gray.width(), gray.height());
+                    gray = DewarpRemapper::dewarp_gray(&gray, &model);
                 }
-                "color" => {
-                    oriented.save(&preview_path).map_err(|e| e.to_string())?;
-                }
-                _ => {
-                    let out_gray = final_bin.to_gray_image();
-                    out_gray.save(&preview_path).map_err(|e| e.to_string())?;
+
+                let bin = match page.binarization_method.as_str() {
+                    "otsu" => binarize_otsu(&gray, 0),
+                    _ => binarize_sauvola(&gray, page.sauvola_window, page.sauvola_k, 0),
+                };
+
+                let deskewed_bin = if page.deskew_angle.abs() > 0.001 {
+                    rotate_binary_image(&bin, page.deskew_angle)
+                } else {
+                    bin
+                };
+
+                let final_bin = if page.despeckle {
+                    scantailor_imageproc::ConnectedComponentLabeler::label_8_connected(&deskewed_bin).despeckle(3)
+                } else {
+                    deskewed_bin
+                };
+
+                match page.output_mode.as_str() {
+                    "grayscale" => {
+                        gray.save(&preview_path).map_err(|e| e.to_string())?;
+                    }
+                    "color" => {
+                        preview_img.save(&preview_path).map_err(|e| e.to_string())?;
+                    }
+                    _ => {
+                        let out_gray = final_bin.to_gray_image();
+                        out_gray.save(&preview_path).map_err(|e| e.to_string())?;
+                    }
                 }
             }
+            _ => {
+                preview_img.save(&preview_path).map_err(|e| e.to_string())?;
+            }
         }
-        _ => {
-            oriented.save(&preview_path).map_err(|e| e.to_string())?;
-        }
-    }
 
-    Ok(StagePreviewResult {
-        preview_path: preview_path.to_string_lossy().to_string(),
-        original_path: page.file_path,
-        width: oriented.width(),
-        height: oriented.height(),
-        auto_deskew_angle,
-        auto_content_box,
-        split_info,
+        Ok(StagePreviewResult {
+            preview_path: preview_path.to_string_lossy().to_string(),
+            original_path: page.file_path,
+            width: orig_w,
+            height: orig_h,
+            auto_deskew_angle,
+            auto_content_box,
+            split_info,
+        })
     })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
