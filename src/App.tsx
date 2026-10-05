@@ -123,32 +123,50 @@ export default function App() {
     });
   });
 
-  // Refresh Preview for Active Page & Stage
+  // Debounced & Thread-safe Preview Refresh
+  let previewDebounceTimer: any = null;
+  let activeRequestId = 0;
+
   const refreshPreview = async () => {
     const page = activePage();
     if (!page) {
       setPreviewResult(null);
       return;
     }
+    const reqId = ++activeRequestId;
     setIsLoading(true);
     try {
       const res = await invoke<StagePreviewResult>("generate_stage_preview", {
         page,
         stage: activeStage(),
       });
-      setPreviewResult(res);
+      // Only commit if this is the newest active request
+      if (reqId === activeRequestId) {
+        setPreviewResult(res);
 
-      // If on Content stage and content_box is not yet set, use detected content box
-      if (activeStage() === "content" && !page.content_box && res.auto_content_box) {
-        setPages((prev) =>
-          prev.map((p) => (p.id === page.id ? { ...p, content_box: res.auto_content_box } : p))
-        );
+        // If on Content stage and content_box is not yet set, use detected content box
+        if (activeStage() === "content" && !page.content_box && res.auto_content_box) {
+          setPages((prev) =>
+            prev.map((p) => (p.id === page.id ? { ...p, content_box: res.auto_content_box } : p))
+          );
+        }
       }
     } catch (err: any) {
-      addToast(`Preview error: ${err}`, "error");
+      if (reqId === activeRequestId) {
+        addToast(`Preview error: ${err}`, "error");
+      }
     } finally {
-      setIsLoading(false);
+      if (reqId === activeRequestId) {
+        setIsLoading(false);
+      }
     }
+  };
+
+  const debouncedRefreshPreview = (delay = 140) => {
+    if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
+    previewDebounceTimer = setTimeout(() => {
+      refreshPreview();
+    }, delay);
   };
 
   // Import Scan Images
@@ -318,33 +336,33 @@ export default function App() {
   };
 
   // Update Split Position
-  const updateSplitX = async (val: number) => {
+  const updateSplitX = (val: number) => {
     const curr = activePage();
     if (!curr) return;
     setPages((prev) => prev.map((p) => (p.id === curr.id ? { ...p, split_x: val } : p)));
-    await refreshPreview();
+    debouncedRefreshPreview(120);
   };
 
   // Update Deskew Angle
-  const updateDeskewAngle = async (angle: number) => {
+  const updateDeskewAngle = (angle: number) => {
     const curr = activePage();
     if (!curr) return;
     setPages((prev) => prev.map((p) => (p.id === curr.id ? { ...p, deskew_angle: angle } : p)));
-    await refreshPreview();
+    debouncedRefreshPreview(120);
   };
 
   // Update Sauvola Parameters
-  const updateSauvola = async (k: number, window: number) => {
+  const updateSauvola = (k: number, window: number) => {
     const curr = activePage();
     if (!curr) return;
     setPages((prev) =>
       prev.map((p) => (p.id === curr.id ? { ...p, sauvola_k: k, sauvola_window: window } : p))
     );
-    await refreshPreview();
+    debouncedRefreshPreview(140);
   };
 
   // Update Margins
-  const updateMargins = async (field: keyof PageItem["margins"], val: number) => {
+  const updateMargins = (field: keyof PageItem["margins"], val: number) => {
     const curr = activePage();
     if (!curr) return;
     setPages((prev) =>
@@ -352,7 +370,7 @@ export default function App() {
         p.id === curr.id ? { ...p, margins: { ...p.margins, [field]: val } } : p
       )
     );
-    await refreshPreview();
+    debouncedRefreshPreview(140);
   };
 
   // Apply Stage to All Pages
