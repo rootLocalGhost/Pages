@@ -654,6 +654,7 @@ input, button, select, textarea {
   box-shadow: var(--shadow-hard-lg);
   background: #ffffff;
   transform-origin: center center;
+  will-change: transform;
 }
 
 .canvas-image {
