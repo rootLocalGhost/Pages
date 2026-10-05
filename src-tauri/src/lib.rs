@@ -206,7 +206,8 @@ fn auto_detect_orientation(image_path: String) -> Result<u32, String> {
 }
 
 #[tauri::command]
-fn auto_detect_split(image_path: String, orientation: u32) -> Result<SplitResultDto, String> {
+fn auto_detect_split(image_path: String, orientation: Option<u32>) -> Result<SplitResultDto, String> {
+    let orientation = orientation.unwrap_or(0);
     let img = image::open(&image_path).map_err(|e| e.to_string())?;
     let oriented = apply_orientation(img, orientation);
     let gray = oriented.to_luma8();
@@ -252,7 +253,8 @@ fn auto_detect_split(image_path: String, orientation: u32) -> Result<SplitResult
 }
 
 #[tauri::command]
-fn auto_detect_deskew(image_path: String, orientation: u32) -> Result<f64, String> {
+fn auto_detect_deskew(image_path: String, orientation: Option<u32>) -> Result<f64, String> {
+    let orientation = orientation.unwrap_or(0);
     let img = image::open(&image_path).map_err(|e| e.to_string())?;
     let oriented = apply_orientation(img, orientation);
     let gray = oriented.to_luma8();
@@ -266,9 +268,11 @@ fn auto_detect_deskew(image_path: String, orientation: u32) -> Result<f64, Strin
 #[tauri::command]
 fn auto_detect_content_box(
     image_path: String,
-    orientation: u32,
-    deskew_angle: f64,
+    orientation: Option<u32>,
+    deskew_angle: Option<f64>,
 ) -> Result<ContentBoxDto, String> {
+    let orientation = orientation.unwrap_or(0);
+    let deskew_angle = deskew_angle.unwrap_or(0.0);
     let img = image::open(&image_path).map_err(|e| e.to_string())?;
     let oriented = apply_orientation(img, orientation);
     let gray = oriented.to_luma8();
