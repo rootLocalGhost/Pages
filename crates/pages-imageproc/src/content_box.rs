@@ -1,11 +1,9 @@
 use crate::binary_image::BinaryImage;
 use crate::connected_components::ConnectedComponentLabeler;
-use scantailor_math::Rect2i;
+use pages_math::Rect2i;
 
 /// Automatically detects the bounding box of printed content on a page,
 /// ignoring edge artifacts and dust speckles.
-///
-/// Ported from Scan Tailor's Select Content stage.
 pub fn detect_content_box(
     img: &BinaryImage,
     min_component_pixels: usize,

@@ -1,4 +1,4 @@
-use scantailor_math::{CubicSpline2D, Point2d};
+use pages_math::{CubicSpline2D, Point2d};
 
 /// Represents a curved line (such as the top or bottom edge of a curled book page).
 #[derive(Debug, Clone, PartialEq)]

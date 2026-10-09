@@ -1,17 +1,17 @@
 [package]
-name = "scantailor-gui"
-version = "0.2.0"
-description = "ScanTailor-Next Desktop GUI Application"
+name = "pages-gui"
+version = "1.0.0"
+description = "Pages — Document Studio"
 edition = "2021"
-authors = ["Scan Tailor Universal Contributors"]
-license = "GPL-3.0-or-later"
+authors = ["Pages Team"]
+license = "MIT"
 
 [lib]
-name = "scantailor_gui_lib"
+name = "pages_gui_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "scantailor-next"
+name = "pages"
 path = "src/main.rs"
 
 [build-dependencies]
@@ -27,10 +27,10 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 rayon = { workspace = true }
 image = { workspace = true }
-scantailor-core = { path = "../crates/scantailor-core" }
-scantailor-imageproc = { path = "../crates/scantailor-imageproc" }
-scantailor-dewarp = { path = "../crates/scantailor-dewarp" }
-scantailor-math = { path = "../crates/scantailor-math" }
+pages-core = { path = "../crates/pages-core" }
+pages-imageproc = { path = "../crates/pages-imageproc" }
+pages-dewarp = { path = "../crates/pages-dewarp" }
+pages-math = { path = "../crates/pages-math" }
 base64 = "0.22"
 num_cpus = "1.16"
 tokio = { version = "1", features = ["full"] }

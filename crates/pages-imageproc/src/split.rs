@@ -1,5 +1,5 @@
 use crate::binary_image::BinaryImage;
-use scantailor_math::Rect2i;
+use pages_math::Rect2i;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PageLayoutMode {

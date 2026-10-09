@@ -1,10 +1,11 @@
 use image::{DynamicImage, ImageReader};
 use rayon::prelude::*;
-use scantailor_dewarp::{CylindricalSurfaceModel, DewarpCurve, DewarpRemapper};
-use scantailor_imageproc::{
+use pages_dewarp::{CylindricalSurfaceModel, DewarpCurve, DewarpRemapper};
+use pages_imageproc::{
     binarize_otsu, binarize_sauvola, detect_content_box, rotate_binary_image,
-    PageLayoutMode, PageSplitDetector, SkewFinder,
+    PageLayoutMode, PageSplitDetector, SkewFinder, ConnectedComponentLabeler,
 };
+use pages_math::Point2d;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -99,7 +100,7 @@ pub struct SystemInfo {
 }
 
 fn get_preview_cache_dir() -> PathBuf {
-    let dir = std::env::temp_dir().join("scantailor_next_previews");
+    let dir = std::env::temp_dir().join("pages_previews");
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
@@ -155,12 +156,23 @@ fn import_images(paths: Vec<String>) -> Result<Vec<PageItem>, String> {
                 .into_dimensions()
                 .unwrap_or_else(|_| (1200, 1600));
 
-            // Generate small thumbnail for filmstrip
+            // Generate small thumbnail for filmstrip and base preview for instant UI interactions
             let thumb_path = cache_dir.join(format!("thumb_{:x}.jpg", hash_str(&path_str)));
-            if !thumb_path.exists() {
+            let base_path = cache_dir.join(format!("base_{:x}.jpg", hash_str(&path_str)));
+            if !thumb_path.exists() || !base_path.exists() {
                 if let Ok(img) = image::open(&path) {
-                    let thumb = img.thumbnail(200, 280);
-                    let _ = thumb.save(&thumb_path);
+                    if !thumb_path.exists() {
+                        let thumb = img.thumbnail(220, 300);
+                        let _ = thumb.save(&thumb_path);
+                    }
+                    if !base_path.exists() {
+                        let base_prev = if img.width() > 1400 || img.height() > 1400 {
+                            img.thumbnail(1400, 1400)
+                        } else {
+                            img
+                        };
+                        let _ = base_prev.save(&base_path);
+                    }
                 }
             }
 
@@ -272,21 +284,46 @@ async fn auto_detect_split(image_path: String, orientation: Option<u32>) -> Resu
     .map_err(|e| e.to_string())?
 }
 
+fn load_working_image(cache_dir: &Path, file_path: &str) -> Result<(DynamicImage, f64, u32, u32), String> {
+    let base_path = cache_dir.join(format!("base_{:x}.jpg", hash_str(file_path)));
+    if base_path.exists() {
+        if let Ok(img) = image::open(&base_path) {
+            let (orig_w, orig_h) = if let Ok(reader) = ImageReader::open(file_path) {
+                if let Ok(fmt) = reader.with_guessed_format() {
+                    fmt.into_dimensions().unwrap_or((img.width(), img.height()))
+                } else {
+                    (img.width(), img.height())
+                }
+            } else {
+                (img.width(), img.height())
+            };
+            let scale = orig_w as f64 / img.width() as f64;
+            return Ok((img, scale, orig_w, orig_h));
+        }
+    }
+
+    let raw = image::open(file_path).map_err(|e| e.to_string())?;
+    let orig_w = raw.width();
+    let orig_h = raw.height();
+    let small = if orig_w > 1400 || orig_h > 1400 {
+        raw.thumbnail(1400, 1400)
+    } else {
+        raw
+    };
+    let _ = small.save(&base_path);
+    let scale = orig_w as f64 / small.width() as f64;
+    Ok((small, scale, orig_w, orig_h))
+}
+
 #[tauri::command]
 async fn auto_detect_deskew(image_path: String, orientation: Option<u32>) -> Result<f64, String> {
     tokio::task::spawn_blocking(move || {
+        let cache_dir = get_preview_cache_dir();
         let orientation = orientation.unwrap_or(0);
-        let img = image::open(&image_path).map_err(|e| e.to_string())?;
+        let (img, _scale, _w, _h) = load_working_image(&cache_dir, &image_path)?;
         let oriented = apply_orientation(img, orientation);
 
-        // Subsample for lightning fast skew detection (identical angle result)
-        let small = if oriented.width() > 1000 || oriented.height() > 1000 {
-            oriented.thumbnail(1000, 1000)
-        } else {
-            oriented
-        };
-
-        let gray = small.to_luma8();
+        let gray = oriented.to_luma8();
         let bin = binarize_sauvola(&gray, 15, 0.25, 0);
 
         let finder = SkewFinder::new();
@@ -304,20 +341,13 @@ async fn auto_detect_content_box(
     deskew_angle: Option<f64>,
 ) -> Result<ContentBoxDto, String> {
     tokio::task::spawn_blocking(move || {
+        let cache_dir = get_preview_cache_dir();
         let orientation = orientation.unwrap_or(0);
         let deskew_angle = deskew_angle.unwrap_or(0.0);
-        let img = image::open(&image_path).map_err(|e| e.to_string())?;
+        let (img, scale, _w, _h) = load_working_image(&cache_dir, &image_path)?;
         let oriented = apply_orientation(img, orientation);
-        let orig_w = oriented.width();
 
-        let small = if oriented.width() > 1200 || oriented.height() > 1200 {
-            oriented.thumbnail(1200, 1200)
-        } else {
-            oriented
-        };
-        let scale = orig_w as f64 / small.width() as f64;
-
-        let gray = small.to_luma8();
+        let gray = oriented.to_luma8();
         let bin = binarize_sauvola(&gray, 15, 0.25, 0);
 
         let rotated_bin = if deskew_angle.abs() > 0.01 {
@@ -333,6 +363,170 @@ async fn auto_detect_content_box(
             width: (bbox.width as f64 * scale) as i32,
             height: (bbox.height as f64 * scale) as i32,
         })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn batch_auto_detect_content(
+    window: tauri::Window,
+    pages: Vec<PageItem>,
+) -> Result<Vec<PageItem>, String> {
+    let cache_dir = get_preview_cache_dir();
+    let total = pages.len();
+    let completed = Arc::new(AtomicUsize::new(0));
+
+    tokio::task::spawn_blocking(move || {
+        let updated: Vec<PageItem> = pages
+            .into_par_iter()
+            .map(|mut page| {
+                if let Ok((img, scale, _w, _h)) = load_working_image(&cache_dir, &page.file_path) {
+                    let oriented = apply_orientation(img, page.orientation);
+                    let gray = oriented.to_luma8();
+                    let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+
+                    let rotated_bin = if page.deskew_angle.abs() > 0.01 {
+                        rotate_binary_image(&bin, page.deskew_angle)
+                    } else {
+                        bin
+                    };
+
+                    let bbox = detect_content_box(&rotated_bin, 10, 5);
+                    page.content_box = Some(ContentBoxDto {
+                        x: (bbox.x as f64 * scale) as i32,
+                        y: (bbox.y as f64 * scale) as i32,
+                        width: (bbox.width as f64 * scale) as i32,
+                        height: (bbox.height as f64 * scale) as i32,
+                    });
+                }
+
+                let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                let pct = (done as f32 / total as f32) * 100.0;
+                let _ = window.emit(
+                    "batch-progress",
+                    BatchProgressEvent {
+                        current: done,
+                        total,
+                        percent: pct,
+                        message: format!("Detecting content box for page {}/{} individually...", done, total),
+                    },
+                );
+
+                page
+            })
+            .collect();
+
+        Ok(updated)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn batch_auto_deskew(
+    window: tauri::Window,
+    pages: Vec<PageItem>,
+) -> Result<Vec<PageItem>, String> {
+    let cache_dir = get_preview_cache_dir();
+    let total = pages.len();
+    let completed = Arc::new(AtomicUsize::new(0));
+
+    tokio::task::spawn_blocking(move || {
+        let updated: Vec<PageItem> = pages
+            .into_par_iter()
+            .map(|mut page| {
+                if let Ok((img, _scale, _w, _h)) = load_working_image(&cache_dir, &page.file_path) {
+                    let oriented = apply_orientation(img, page.orientation);
+                    let gray = oriented.to_luma8();
+                    let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+
+                    let finder = SkewFinder::new();
+                    let skew_res = finder.find_skew(&bin);
+                    page.deskew_angle = skew_res.angle_deg;
+                    page.auto_deskew_angle = Some(skew_res.angle_deg);
+                }
+
+                let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                let pct = (done as f32 / total as f32) * 100.0;
+                let _ = window.emit(
+                    "batch-progress",
+                    BatchProgressEvent {
+                        current: done,
+                        total,
+                        percent: pct,
+                        message: format!("Straightening page {}/{} individually...", done, total),
+                    },
+                );
+
+                page
+            })
+            .collect();
+
+        Ok(updated)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn batch_auto_analyze_all(
+    window: tauri::Window,
+    pages: Vec<PageItem>,
+) -> Result<Vec<PageItem>, String> {
+    let cache_dir = get_preview_cache_dir();
+    let total = pages.len();
+    let completed = Arc::new(AtomicUsize::new(0));
+
+    tokio::task::spawn_blocking(move || {
+        let updated: Vec<PageItem> = pages
+            .into_par_iter()
+            .map(|mut page| {
+                if let Ok((img, scale, _w, _h)) = load_working_image(&cache_dir, &page.file_path) {
+                    let oriented = apply_orientation(img, page.orientation);
+                    let gray = oriented.to_luma8();
+                    let bin = binarize_sauvola(&gray, 15, 0.25, 0);
+
+                    // 1. Deskew per page
+                    let finder = SkewFinder::new();
+                    let skew_res = finder.find_skew(&bin);
+                    page.deskew_angle = skew_res.angle_deg;
+                    page.auto_deskew_angle = Some(skew_res.angle_deg);
+
+                    // 2. Rotate binary
+                    let rotated_bin = if page.deskew_angle.abs() > 0.01 {
+                        rotate_binary_image(&bin, page.deskew_angle)
+                    } else {
+                        bin
+                    };
+
+                    // 3. Content box per page
+                    let bbox = detect_content_box(&rotated_bin, 10, 5);
+                    page.content_box = Some(ContentBoxDto {
+                        x: (bbox.x as f64 * scale) as i32,
+                        y: (bbox.y as f64 * scale) as i32,
+                        width: (bbox.width as f64 * scale) as i32,
+                        height: (bbox.height as f64 * scale) as i32,
+                    });
+                }
+
+                let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                let pct = (done as f32 / total as f32) * 100.0;
+                let _ = window.emit(
+                    "batch-progress",
+                    BatchProgressEvent {
+                        current: done,
+                        total,
+                        percent: pct,
+                        message: format!("Auto-analyzing page {}/{} (Deskew & Content)...", done, total),
+                    },
+                );
+
+                page
+            })
+            .collect();
+
+        Ok(updated)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -357,35 +551,26 @@ async fn generate_stage_preview(page: PageItem, stage: String) -> Result<StagePr
         );
         let preview_path = cache_dir.join(format!("prev_{:x}.jpg", hash_str(&hash_key)));
 
-        let mut auto_deskew_angle = None;
-        let mut auto_content_box = None;
-        let mut split_info = None;
-
-        let img = image::open(&page.file_path).map_err(|e| e.to_string())?;
-        let oriented = apply_orientation(img, page.orientation);
-        let orig_w = oriented.width();
-        let orig_h = oriented.height();
-
         // Cache hit: return immediately with zero computation!
         if preview_path.exists() {
             return Ok(StagePreviewResult {
                 preview_path: preview_path.to_string_lossy().to_string(),
                 original_path: page.file_path,
-                width: orig_w,
-                height: orig_h,
+                width: page.width,
+                height: page.height,
                 auto_deskew_angle: None,
                 auto_content_box: None,
                 split_info: None,
             });
         }
 
-        // Fast downsampled preview (max 1400px) for smooth 60fps UI
-        let preview_img = if orig_w > 1400 || orig_h > 1400 {
-            oriented.thumbnail(1400, 1400)
-        } else {
-            oriented
-        };
-        let scale = orig_w as f64 / preview_img.width() as f64;
+        let mut auto_deskew_angle = None;
+        let mut auto_content_box = None;
+        let mut split_info = None;
+
+        let (img, scale, orig_w, orig_h) = load_working_image(&cache_dir, &page.file_path)?;
+        let oriented = apply_orientation(img, page.orientation);
+        let preview_img = oriented;
 
         match stage.as_str() {
             "orientation" => {
@@ -476,14 +661,14 @@ async fn generate_stage_preview(page: PageItem, stage: String) -> Result<StagePr
                     let w = gray.width() as f64;
                     let h = gray.height() as f64;
                     let top_curve = DewarpCurve::new(vec![
-                        scantailor_math::Point2d::new(0.0, 0.0),
-                        scantailor_math::Point2d::new(w * 0.5, 12.0),
-                        scantailor_math::Point2d::new(w, 0.0),
+                        Point2d::new(0.0, 0.0),
+                        Point2d::new(w * 0.5, 12.0),
+                        Point2d::new(w, 0.0),
                     ]);
                     let bottom_curve = DewarpCurve::new(vec![
-                        scantailor_math::Point2d::new(0.0, h),
-                        scantailor_math::Point2d::new(w * 0.5, h - 12.0),
-                        scantailor_math::Point2d::new(w, h),
+                        Point2d::new(0.0, h),
+                        Point2d::new(w * 0.5, h - 12.0),
+                        Point2d::new(w, h),
                     ]);
                     let model = CylindricalSurfaceModel::new(top_curve, bottom_curve, gray.width(), gray.height());
                     gray = DewarpRemapper::dewarp_gray(&gray, &model);
@@ -501,7 +686,7 @@ async fn generate_stage_preview(page: PageItem, stage: String) -> Result<StagePr
                 };
 
                 let final_bin = if page.despeckle {
-                    scantailor_imageproc::ConnectedComponentLabeler::label_8_connected(&deskewed_bin).despeckle(3)
+                    ConnectedComponentLabeler::label_8_connected(&deskewed_bin).despeckle(3)
                 } else {
                     deskewed_bin
                 };
@@ -571,7 +756,7 @@ async fn run_batch_processing(
                 };
 
                 let final_bin = if page.despeckle {
-                    scantailor_imageproc::ConnectedComponentLabeler::label_8_connected(&deskewed).despeckle(3)
+                    ConnectedComponentLabeler::label_8_connected(&deskewed).despeckle(3)
                 } else {
                     deskewed
                 };
@@ -615,9 +800,12 @@ pub fn run() {
             auto_detect_split,
             auto_detect_deskew,
             auto_detect_content_box,
+            batch_auto_detect_content,
+            batch_auto_deskew,
+            batch_auto_analyze_all,
             generate_stage_preview,
             run_batch_processing,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running ScanTailor-Next");
+        .expect("error while running Pages");
 }

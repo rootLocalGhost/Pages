@@ -1,6 +1,4 @@
 /// Multi-variable Quadratic Function: `F(x) = x^T * A * x + b^T * x + c`
-///
-/// Ported from Scan Tailor's `QuadraticFunction`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuadraticFunction {
     /// N x N matrix stored in row-major order (size N * N)

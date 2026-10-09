@@ -14,24 +14,24 @@ import {
 import "./App.css";
 
 const STAGES: { id: Stage; num: number; name: string; desc: string; icon: string }[] = [
-  { id: "orientation", num: 1, name: "Orientation", desc: "Rotate scans", icon: "↺" },
-  { id: "split", num: 2, name: "Split Pages", desc: "Dual spread cut", icon: "✂" },
-  { id: "deskew", num: 3, name: "Deskew", desc: "Fine straighten", icon: "📐" },
-  { id: "content", num: 4, name: "Content Box", desc: "Detect & crop", icon: "⛶" },
-  { id: "margins", num: 5, name: "Margins", desc: "Uniform layout", icon: "📏" },
-  { id: "output", num: 6, name: "Output", desc: "Sauvola binarize", icon: "⚡" },
+  { id: "orientation", num: 1, name: "Orientation", desc: "Rotate & flip scans", icon: "↺" },
+  { id: "split", num: 2, name: "Split Pages", desc: "Dual spread cutting", icon: "✂" },
+  { id: "deskew", num: 3, name: "Deskew", desc: "Fine straighten angle", icon: "📐" },
+  { id: "content", num: 4, name: "Content Box", desc: "Per-page detect & crop", icon: "⛶" },
+  { id: "margins", num: 5, name: "Margins", desc: "Uniform layout borders", icon: "📏" },
+  { id: "output", num: 6, name: "Output", desc: "Sauvola binarize & filters", icon: "⚡" },
 ];
 
 export default function App() {
   // Theme State
   const [theme, setTheme] = createSignal<"light" | "dark">(
-    (localStorage.getItem("scantailor-theme") as "light" | "dark") || "light"
+    (localStorage.getItem("pages-theme") as "light" | "dark") || "light"
   );
 
   const toggleTheme = () => {
     const next = theme() === "light" ? "dark" : "light";
     setTheme(next);
-    localStorage.setItem("scantailor-theme", next);
+    localStorage.setItem("pages-theme", next);
   };
 
   // Application State
@@ -44,6 +44,9 @@ export default function App() {
   const [searchFilter, setSearchFilter] = createSignal("");
   const [filmstripCollapsed, setFilmstripCollapsed] = createSignal(false);
 
+  // Instant Display Cache (CamScanner-grade 0ms display on selection)
+  const [instantPreviewSrc, setInstantPreviewSrc] = createSignal<string | null>(null);
+
   // Viewport & Canvas Pan/Zoom State
   const [zoom, setZoom] = createSignal(0.85);
   const [pan, setPan] = createSignal({ x: 0, y: 0 });
@@ -52,6 +55,7 @@ export default function App() {
 
   // Interactive Canvas Overlays
   const [showDeskewGrid, setShowDeskewGrid] = createSignal(true);
+  const [showCurtainComparison, setShowCurtainComparison] = createSignal(true);
   const [curtainPos, setCurtainPos] = createSignal(0.5);
   const [isDraggingCurtain, setIsDraggingCurtain] = createSignal(false);
   const [isDraggingCutLine, setIsDraggingCutLine] = createSignal(false);
@@ -61,9 +65,10 @@ export default function App() {
   const [cropDragHandle, setCropDragHandle] = createSignal<string | null>(null);
   const [cropDragStart, setCropDragStart] = createSignal({ mouseX: 0, mouseY: 0, box: { x: 0, y: 0, width: 0, height: 0 } });
 
-  // Batch Processing State
+  // Batch Processing & Analysis State
   const [isBatchProcessing, setIsBatchProcessing] = createSignal(false);
-  const [batchProgress, setBatchProgress] = createSignal<BatchProgressEvent>({
+  const [isAnalyzing, setIsAnalyzing] = createSignal(false);
+  const [analysisStatus, setAnalysisStatus] = createSignal<BatchProgressEvent>({
     current: 0,
     total: 0,
     percent: 0,
@@ -100,7 +105,7 @@ export default function App() {
     try {
       const { listen } = await import("@tauri-apps/api/event");
       await listen<BatchProgressEvent>("batch-progress", (event) => {
-        setBatchProgress(event.payload);
+        setAnalysisStatus(event.payload);
       });
     } catch {}
 
@@ -111,7 +116,7 @@ export default function App() {
       if (e.key >= "1" && e.key <= "6") {
         const stageIdx = parseInt(e.key) - 1;
         if (STAGES[stageIdx]) {
-          switchStage(STAGES[stageIdx].id);
+          setActiveStage(STAGES[stageIdx].id);
         }
       } else if (e.key === "r" || e.key === "R") {
         rotatePage(90);
@@ -131,6 +136,7 @@ export default function App() {
     const page = activePage();
     if (!page) {
       setPreviewResult(null);
+      setInstantPreviewSrc(null);
       return;
     }
     const reqId = ++activeRequestId;
@@ -143,6 +149,7 @@ export default function App() {
       // Only commit if this is the newest active request
       if (reqId === activeRequestId) {
         setPreviewResult(res);
+        setInstantPreviewSrc(null); // High-res preview loaded!
 
         // If on Content stage and content_box is not yet set, use detected content box
         if (activeStage() === "content" && !page.content_box && res.auto_content_box) {
@@ -169,7 +176,7 @@ export default function App() {
     }, delay);
   };
 
-  // Import Scan Images
+  // Import Scan Images (Single primary import flow)
   const handleImportImages = async () => {
     try {
       const selected = await open({
@@ -186,37 +193,21 @@ export default function App() {
 
       setPages((prev) => [...prev, ...imported]);
       if (!selectedPageId() && imported.length > 0) {
-        setSelectedPageId(imported[0].id);
+        selectPage(imported[0].id);
       }
       addToast(`Loaded ${imported.length} scan pages successfully!`, "success");
-      await refreshPreview();
     } catch (err: any) {
       addToast(`Import failed: ${err}`, "error");
     }
   };
 
-  // Stage Switching
-  const switchStage = async (stage: Stage) => {
-    setActiveStage(stage);
-    // If switching to Content and box is missing, calculate default
-    const curr = activePage();
-    if (stage === "content" && curr && !curr.content_box && previewResult()) {
-      const w = previewResult()!.width || 2000;
-      const h = previewResult()!.height || 3000;
-      const defaultBox: ContentBoxDto = {
-        x: Math.round(w * 0.08),
-        y: Math.round(h * 0.08),
-        width: Math.round(w * 0.84),
-        height: Math.round(h * 0.84),
-      };
-      setPages((all) => all.map((p) => (p.id === curr.id ? { ...p, content_box: defaultBox } : p)));
-    }
-    await refreshPreview();
-  };
-
-  // Select Page
+  // Select Page (Instant 0ms display via cached thumbnail)
   const selectPage = async (id: string) => {
     setSelectedPageId(id);
+    const p = pages().find((item) => item.id === id);
+    if (p?.thumbnail_path) {
+      setInstantPreviewSrc(convertFileSrc(p.thumbnail_path));
+    }
     await refreshPreview();
   };
 
@@ -229,7 +220,7 @@ export default function App() {
     await refreshPreview();
   };
 
-  // Auto Orientation
+  // Auto Orientation (Current Page)
   const handleAutoOrientation = async () => {
     const curr = activePage();
     if (!curr) return;
@@ -239,35 +230,38 @@ export default function App() {
       addToast(`Orientation detected: ${rot}°`, "success");
       await refreshPreview();
     } catch (err: any) {
-      addToast(`Auto-orientation error: ${err}`, "error");
+      addToast(`Orientation detection failed: ${err}`, "error");
     }
   };
 
-  // Auto Split
+  // Auto Split (Current Page)
   const handleAutoSplit = async () => {
     const curr = activePage();
     if (!curr) return;
     try {
-      const split = await invoke<any>("auto_detect_split", {
+      const res = await invoke<any>("auto_detect_split", {
         imagePath: curr.file_path,
         orientation: curr.orientation,
       });
-      const mode = split.mode === "two-pages" ? "two-pages" : "single";
       setPages((prev) =>
         prev.map((p) =>
           p.id === curr.id
-            ? { ...p, split_mode: mode, split_x: split.split_x ? Math.round(split.split_x) : null }
+            ? {
+                ...p,
+                split_mode: res.mode === "two-pages" ? "two-pages" : "single",
+                split_x: res.split_x || p.split_x,
+              }
             : p
         )
       );
-      addToast(`Detected split mode: ${mode}`, "success");
+      addToast(`Detected split mode: ${res.mode}`, "success");
       await refreshPreview();
     } catch (err: any) {
-      addToast(`Auto-split error: ${err}`, "error");
+      addToast(`Split detection failed: ${err}`, "error");
     }
   };
 
-  // Auto Deskew
+  // Auto Deskew (Current Page)
   const handleAutoDeskew = async () => {
     const curr = activePage();
     if (!curr) return;
@@ -279,60 +273,95 @@ export default function App() {
       setPages((prev) =>
         prev.map((p) => (p.id === curr.id ? { ...p, deskew_angle: angle, auto_deskew_angle: angle } : p))
       );
-      addToast(`Detected deskew angle: ${angle.toFixed(2)}°`, "success");
+      addToast(`Straightened page: ${angle.toFixed(2)}°`, "success");
       await refreshPreview();
     } catch (err: any) {
       addToast(`Deskew calculation failed: ${err}`, "error");
     }
   };
 
-  // Auto Content Box
+  // Batch Auto-Deskew (Individual Calculation per Image)
+  const handleBatchAutoDeskew = async () => {
+    if (pages().length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisStatus({
+      current: 0,
+      total: pages().length,
+      percent: 0,
+      message: "Straightening all pages individually...",
+    });
+    try {
+      const updated = await invoke<PageItem[]>("batch_auto_deskew", { pages: pages() });
+      setPages(updated);
+      addToast(`Straightened ${updated.length} pages individually!`, "success");
+      await refreshPreview();
+    } catch (err: any) {
+      addToast(`Batch deskew failed: ${err}`, "error");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Auto Content Box (Current Page)
   const handleAutoContentBox = async () => {
     const curr = activePage();
     if (!curr) return;
     try {
-      const box = await invoke<ContentBoxDto>("auto_detect_content_box", {
+      const bbox = await invoke<ContentBoxDto>("auto_detect_content_box", {
         imagePath: curr.file_path,
         orientation: curr.orientation,
         deskewAngle: curr.deskew_angle,
       });
-      setPages((prev) => prev.map((p) => (p.id === curr.id ? { ...p, content_box: box } : p)));
-      addToast(`Content box detected: ${box.width}×${box.height} px`, "success");
+      setPages((prev) => prev.map((p) => (p.id === curr.id ? { ...p, content_box: bbox } : p)));
+      addToast(`Detected content box: ${bbox.width}×${bbox.height}px`, "success");
       await refreshPreview();
     } catch (err: any) {
-      addToast(`Content box detection error: ${err}`, "error");
+      addToast(`Content box detection failed: ${err}`, "error");
     }
   };
 
-  // Content Box Presets
-  const applyContentPreset = (mode: "full" | "margin85" | "book75") => {
-    const curr = activePage();
-    const prev = previewResult();
-    if (!curr || !prev) return;
-    const w = prev.width;
-    const h = prev.height;
-
-    let newBox: ContentBoxDto;
-    if (mode === "full") {
-      newBox = { x: 0, y: 0, width: w, height: h };
-    } else if (mode === "margin85") {
-      newBox = {
-        x: Math.round(w * 0.075),
-        y: Math.round(h * 0.075),
-        width: Math.round(w * 0.85),
-        height: Math.round(h * 0.85),
-      };
-    } else {
-      newBox = {
-        x: Math.round(w * 0.125),
-        y: Math.round(h * 0.125),
-        width: Math.round(w * 0.75),
-        height: Math.round(h * 0.75),
-      };
+  // Batch Auto Content Box (Individual Detection per Image)
+  const handleBatchAutoContentBox = async () => {
+    if (pages().length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisStatus({
+      current: 0,
+      total: pages().length,
+      percent: 0,
+      message: "Detecting content boxes individually per page...",
+    });
+    try {
+      const updated = await invoke<PageItem[]>("batch_auto_detect_content", { pages: pages() });
+      setPages(updated);
+      addToast(`Detected unique content boxes for all ${updated.length} pages!`, "success");
+      await refreshPreview();
+    } catch (err: any) {
+      addToast(`Batch content detection failed: ${err}`, "error");
+    } finally {
+      setIsAnalyzing(false);
     }
+  };
 
-    setPages((all) => all.map((p) => (p.id === curr.id ? { ...p, content_box: newBox } : p)));
-    addToast(`Applied content preset: ${mode}`, "info");
+  // Master Smart Auto-Analyze ALL Pages (Full Individual Pipeline)
+  const handleBatchAutoAnalyzeAll = async () => {
+    if (pages().length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisStatus({
+      current: 0,
+      total: pages().length,
+      percent: 0,
+      message: "Running smart multithreaded analysis per page...",
+    });
+    try {
+      const updated = await invoke<PageItem[]>("batch_auto_analyze_all", { pages: pages() });
+      setPages(updated);
+      addToast(`Analyzed all ${updated.length} pages (deskew & content boxes)!`, "success");
+      await refreshPreview();
+    } catch (err: any) {
+      addToast(`Batch analysis failed: ${err}`, "error");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   // Update Split Position
@@ -340,78 +369,77 @@ export default function App() {
     const curr = activePage();
     if (!curr) return;
     setPages((prev) => prev.map((p) => (p.id === curr.id ? { ...p, split_x: val } : p)));
-    debouncedRefreshPreview(120);
+    debouncedRefreshPreview(80);
   };
 
   // Update Deskew Angle
-  const updateDeskewAngle = (angle: number) => {
+  const updateDeskewAngle = (deg: number) => {
     const curr = activePage();
     if (!curr) return;
-    setPages((prev) => prev.map((p) => (p.id === curr.id ? { ...p, deskew_angle: angle } : p)));
-    debouncedRefreshPreview(120);
+    setPages((prev) => prev.map((p) => (p.id === curr.id ? { ...p, deskew_angle: deg } : p)));
+    debouncedRefreshPreview(80);
   };
 
-  // Update Sauvola Parameters
-  const updateSauvola = (k: number, window: number) => {
+  // Content Box Presets
+  const applyContentPreset = (preset: "full" | "margin85" | "book75") => {
+    const curr = activePage();
+    const prev = previewResult();
+    if (!curr || !prev) return;
+
+    let w = prev.width;
+    let h = prev.height;
+    let box: ContentBoxDto;
+
+    if (preset === "full") {
+      box = { x: 0, y: 0, width: w, height: h };
+    } else if (preset === "margin85") {
+      box = {
+        x: Math.round(w * 0.075),
+        y: Math.round(h * 0.075),
+        width: Math.round(w * 0.85),
+        height: Math.round(h * 0.85),
+      };
+    } else {
+      box = {
+        x: Math.round(w * 0.125),
+        y: Math.round(h * 0.125),
+        width: Math.round(w * 0.75),
+        height: Math.round(h * 0.75),
+      };
+    }
+
+    setPages((all) => all.map((p) => (p.id === curr.id ? { ...p, content_box: box } : p)));
+    refreshPreview();
+  };
+
+  // Apply Margins to All
+  const applyMarginsToAll = () => {
+    const curr = activePage();
+    if (!curr) return;
+    setPages((prev) => prev.map((p) => ({ ...p, margins: { ...curr.margins } })));
+    addToast(`Margins applied to all ${pages().length} pages!`, "success");
+  };
+
+  // Apply Output Settings to All
+  const applyOutputSettingsToAll = () => {
     const curr = activePage();
     if (!curr) return;
     setPages((prev) =>
-      prev.map((p) => (p.id === curr.id ? { ...p, sauvola_k: k, sauvola_window: window } : p))
+      prev.map((p) => ({
+        ...p,
+        output_mode: curr.output_mode,
+        binarization_method: curr.binarization_method,
+        sauvola_k: curr.sauvola_k,
+        sauvola_window: curr.sauvola_window,
+        despeckle: curr.despeckle,
+        dewarp: curr.dewarp,
+        dpi: curr.dpi,
+      }))
     );
-    debouncedRefreshPreview(140);
+    addToast(`Output settings applied to all ${pages().length} pages!`, "success");
   };
 
-  // Update Margins
-  const updateMargins = (field: keyof PageItem["margins"], val: number) => {
-    const curr = activePage();
-    if (!curr) return;
-    setPages((prev) =>
-      prev.map((p) =>
-        p.id === curr.id ? { ...p, margins: { ...p.margins, [field]: val } } : p
-      )
-    );
-    debouncedRefreshPreview(140);
-  };
-
-  // Apply Stage to All Pages
-  const applyStageToAll = async () => {
-    const curr = activePage();
-    if (!curr) return;
-    const stage = activeStage();
-
-    setPages((prev) =>
-      prev.map((p) => {
-        switch (stage) {
-          case "orientation":
-            return { ...p, orientation: curr.orientation };
-          case "split":
-            return { ...p, split_mode: curr.split_mode, split_x: curr.split_x };
-          case "deskew":
-            return { ...p, deskew_angle: curr.deskew_angle };
-          case "content":
-            return { ...p, content_box: curr.content_box ? { ...curr.content_box } : null };
-          case "margins":
-            return { ...p, margins: { ...curr.margins } };
-          case "output":
-            return {
-              ...p,
-              output_mode: curr.output_mode,
-              binarization_method: curr.binarization_method,
-              sauvola_k: curr.sauvola_k,
-              sauvola_window: curr.sauvola_window,
-              despeckle: curr.despeckle,
-              dewarp: curr.dewarp,
-              dpi: curr.dpi,
-            };
-          default:
-            return p;
-        }
-      })
-    );
-    addToast(`Stage "${stage}" settings applied to all ${pages().length} pages!`, "success");
-  };
-
-  // Run Batch Processing
+  // Run Batch Processing & Export
   const startBatchProcessing = async () => {
     if (pages().length === 0) {
       addToast("Please import scan pages before running batch", "error");
@@ -429,11 +457,11 @@ export default function App() {
 
       setShowBatchModal(true);
       setIsBatchProcessing(true);
-      setBatchProgress({
+      setAnalysisStatus({
         current: 0,
         total: pages().length,
         percent: 0,
-        message: "Rayon multithreaded engine initialized...",
+        message: "Rayon multithreaded export engine running...",
       });
 
       const results = await invoke<string[]>("run_batch_processing", {
@@ -478,13 +506,13 @@ export default function App() {
       }
     }
 
-    // Curtain Slider Drag
+    // Curtain Slider Drag (Real Before / After Reveals)
     if (isDraggingCurtain()) {
-      const container = document.querySelector(".image-canvas-wrapper") as HTMLElement;
+      const container = document.querySelector(".curtain-container") as HTMLElement;
       if (container) {
         const rect = container.getBoundingClientRect();
         const rel = (e.clientX - rect.left) / rect.width;
-        setCurtainPos(Math.max(0.02, Math.min(0.98, rel)));
+        setCurtainPos(Math.max(0.01, Math.min(0.99, rel)));
       }
     }
 
@@ -565,8 +593,8 @@ export default function App() {
         <div class="brand-row">
           <div class="brand-icon">⚡</div>
           <div class="brand-text-wrap">
-            <span class="brand-name">ScanTailor Next</span>
-            <span class="brand-tagline">Neo-Brutalist Digitization Studio</span>
+            <span class="brand-name">Pages</span>
+            <span class="brand-tagline">Document Restoration Studio</span>
           </div>
         </div>
 
@@ -574,13 +602,17 @@ export default function App() {
           <Show when={systemInfo()}>
             <div class="neo-pill-badge lime">
               <span class="status-dot green"></span>
-              <span>Rayon Multithreading ({systemInfo()!.cpu_cores} Cores)</span>
+              <span>Rayon Engine ({systemInfo()!.cpu_cores} Cores)</span>
             </div>
           </Show>
 
           <div class="neo-pill-badge blue">
-            <span>Pages Loaded:</span>
+            <span>Pages:</span>
             <span class="font-mono">{pages().length}</span>
+          </div>
+
+          <div class="neo-pill-badge purple">
+            <span>GPL-3.0 Open Source</span>
           </div>
         </div>
 
@@ -589,6 +621,7 @@ export default function App() {
             {theme() === "light" ? "🌙" : "☀️"}
           </button>
 
+          {/* PRIMARY IMPORT BUTTON */}
           <button class="neo-btn lime" onClick={handleImportImages}>
             📁 Import Scans
           </button>
@@ -599,28 +632,25 @@ export default function App() {
         </div>
       </header>
 
-      {/* Pipeline Stepper Banner */}
-      <nav class="neo-stepper-bar">
-        <div class="stepper-tabs">
-          <For each={STAGES}>
-            {(stage) => (
-              <button
-                class={`stage-tab-btn ${activeStage() === stage.id ? "active" : ""}`}
-                onClick={() => switchStage(stage.id)}
-              >
-                <div class="stage-index-badge">{stage.num}</div>
-                <span>{stage.icon} {stage.name}</span>
-              </button>
-            )}
-          </For>
-        </div>
+      {/* Animated Top Processing Banner */}
+      <Show when={isAnalyzing() || isBatchProcessing()}>
+        <div class="neo-processing-banner">
+          <div class="processing-info">
+            <span class="processing-spinner">⚡</span>
+            <span>{analysisStatus().message || "Processing operation in parallel..."}</span>
+          </div>
 
-        <div>
-          <button class="neo-btn sm" onClick={applyStageToAll} title="Apply stage settings to all pages">
-            ⚡ Apply to All Pages
-          </button>
+          <div class="processing-progress-wrap">
+            <div class="neo-progress-track banner">
+              <div
+                class="neo-progress-fill striped"
+                style={{ width: `${Math.min(100, Math.max(5, analysisStatus().percent))}%` }}
+              ></div>
+            </div>
+            <span class="processing-percent-chip">{Math.round(analysisStatus().percent)}%</span>
+          </div>
         </div>
-      </nav>
+      </Show>
 
       {/* Main 3-Column Studio Layout */}
       <main class={`neo-workspace-grid ${filmstripCollapsed() ? "filmstrip-collapsed" : ""}`}>
@@ -628,7 +658,7 @@ export default function App() {
         <aside class="filmstrip-panel">
           <div class="filmstrip-header-row">
             <div class="filmstrip-heading">
-              <span>Filmstrip</span>
+              <span>Scans List</span>
               <span class="count-chip">{pages().length}</span>
             </div>
             <button
@@ -644,7 +674,7 @@ export default function App() {
             <input
               type="text"
               class="neo-input"
-              placeholder="Search page filename..."
+              placeholder="Search filename..."
               value={searchFilter()}
               onInput={(e) => setSearchFilter(e.currentTarget.value)}
             />
@@ -656,11 +686,8 @@ export default function App() {
               fallback={
                 <div style={{ "text-align": "center", "padding": "40px 10px", "color": "var(--ink-muted)" }}>
                   <div style={{ "font-size": "32px", "margin-bottom": "8px" }}>📄</div>
-                  <div class="font-heading" style={{ "font-weight": "800", "margin-bottom": "6px" }}>No Scans Yet</div>
-                  <p style={{ "font-size": "11px", "margin-bottom": "14px" }}>Import book or manuscript files to start</p>
-                  <button class="neo-btn lime sm" onClick={handleImportImages}>
-                    + Import Scans
-                  </button>
+                  <div class="font-heading" style={{ "font-weight": "800", "margin-bottom": "4px" }}>No Scans Loaded</div>
+                  <p style={{ "font-size": "11px" }}>Use Import Scans above to load files</p>
                 </div>
               }
             >
@@ -708,21 +735,29 @@ export default function App() {
 
         {/* Center Column: Canvas Viewport & Overlays */}
         <section class="neo-canvas-column">
+          {/* Floating Canvas Loading Indicator */}
+          <Show when={isLoading()}>
+            <div class="canvas-loading-pill">
+              <span class="processing-spinner">⚡</span>
+              <span>Rendering Preview...</span>
+            </div>
+          </Show>
+
           <div
             class="canvas-viewport-root"
             onMouseDown={handleCanvasMouseDown}
             onWheel={handleCanvasWheel}
           >
             <Show
-              when={previewResult()}
+              when={activePage()}
               fallback={
                 <div style={{ "text-align": "center", "background": "var(--bg-surface)", "padding": "40px", "border": "var(--border-width) solid var(--border-color)", "border-radius": "var(--radius-lg)", "box-shadow": "var(--shadow-hard-lg)", "max-width": "460px" }}>
                   <div style={{ "font-size": "48px", "margin-bottom": "12px" }}>📖</div>
-                  <h2 class="font-heading" style={{ "font-size": "18px", "font-weight": "800", "margin-bottom": "8px" }}>
-                    ScanTailor Studio
+                  <h2 class="font-heading" style={{ "font-size": "20px", "font-weight": "800", "margin-bottom": "8px" }}>
+                    Pages Studio
                   </h2>
                   <p style={{ "font-size": "12px", "color": "var(--ink-muted)", "margin-bottom": "20px" }}>
-                    Import documents or book scans from the top bar to inspect, deskew, and binarize.
+                    Import documents, manuscripts, or book scans to auto-straighten, crop, and binarize.
                   </p>
                   <button class="neo-btn lime" onClick={handleImportImages}>
                     📁 Import Scan Files
@@ -736,11 +771,67 @@ export default function App() {
                   transform: `translate(${pan().x}px, ${pan().y}px) scale(${zoom()})`,
                 }}
               >
-                <img
-                  src={convertFileSrc(previewResult()!.preview_path)}
-                  alt="Stage preview"
-                  class="canvas-image"
-                />
+                {/* Instant Low-Res / Thumbnail Placeholder (0ms feedback on page switch) */}
+                <Show when={instantPreviewSrc() && (!previewResult() || isLoading())}>
+                  <img
+                    src={instantPreviewSrc()!}
+                    alt="Fast preview"
+                    class="canvas-image"
+                    style={{ "filter": "brightness(0.95)" }}
+                  />
+                </Show>
+
+                {/* Main Preview with Functional Before/After Curtain Split in Output Stage */}
+                <Show when={previewResult()}>
+                  <Show
+                    when={activeStage() === "output" && showCurtainComparison() && activePage()}
+                    fallback={
+                      <img
+                        src={convertFileSrc(previewResult()!.preview_path)}
+                        alt="Stage preview"
+                        class="canvas-image"
+                      />
+                    }
+                  >
+                    {/* Functional Before / After Curtain Comparison */}
+                    <div class="curtain-container">
+                      {/* Underlay: Original Raw Scan (Before) */}
+                      <img
+                        src={convertFileSrc(activePage()!.file_path)}
+                        alt="Original scan (Before)"
+                        class="curtain-before-img"
+                      />
+                      <div class="curtain-label before">BEFORE (RAW)</div>
+
+                      {/* Overlay: Processed Sauvola Preview (After), Clipped by Curtain Position */}
+                      <div
+                        class="curtain-after-wrap"
+                        style={{
+                          "clip-path": `inset(0 0 0 ${curtainPos() * 100}%)`,
+                        }}
+                      >
+                        <img
+                          src={convertFileSrc(previewResult()!.preview_path)}
+                          alt="Processed preview (After)"
+                          class="curtain-after-img"
+                        />
+                        <div class="curtain-label after">AFTER (PROCESSED)</div>
+                      </div>
+
+                      {/* Draggable Divider Bar */}
+                      <div
+                        class="curtain-bar-wrap"
+                        style={{ left: `${curtainPos() * 100}%` }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setIsDraggingCurtain(true);
+                        }}
+                      >
+                        <div class="curtain-disc" title="Drag to compare before & after">⇄</div>
+                      </div>
+                    </div>
+                  </Show>
+                </Show>
 
                 {/* Stage 2 Overlay: Split Cutter Line */}
                 <Show when={activeStage() === "split" && activePage()?.split_mode === "two-pages"}>
@@ -751,8 +842,8 @@ export default function App() {
                       class="split-guide-bar"
                       style={{
                         left: `${
-                          activePage()?.split_x && previewResult()!.width > 0
-                            ? (activePage()!.split_x! / previewResult()!.width) * 100
+                          activePage()?.split_x && (previewResult()?.width || activePage()!.width) > 0
+                            ? (activePage()!.split_x! / (previewResult()?.width || activePage()!.width)) * 100
                             : 50
                         }%`,
                       }}
@@ -777,14 +868,14 @@ export default function App() {
                 </Show>
 
                 {/* Stage 4 Overlay: Draggable & Resizable Content Box */}
-                <Show when={activeStage() === "content" && activePage()?.content_box && previewResult()!.width > 0}>
+                <Show when={activeStage() === "content" && activePage()?.content_box && (previewResult()?.width || activePage()!.width) > 0}>
                   <div
                     class="content-box-mask"
                     style={{
-                      left: `${(activePage()!.content_box!.x / previewResult()!.width) * 100}%`,
-                      top: `${(activePage()!.content_box!.y / previewResult()!.height) * 100}%`,
-                      width: `${(activePage()!.content_box!.width / previewResult()!.width) * 100}%`,
-                      height: `${(activePage()!.content_box!.height / previewResult()!.height) * 100}%`,
+                      left: `${(activePage()!.content_box!.x / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                      top: `${(activePage()!.content_box!.y / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                      width: `${(activePage()!.content_box!.width / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                      height: `${(activePage()!.content_box!.height / (previewResult()?.height || activePage()!.height)) * 100}%`,
                     }}
                     onMouseDown={(e) => {
                       e.stopPropagation();
@@ -858,20 +949,6 @@ export default function App() {
                   <div class="margin-rule-h" style={{ top: `${activePage()?.margins.top || 10}%` }}></div>
                   <div class="margin-rule-h" style={{ bottom: `${activePage()?.margins.bottom || 10}%` }}></div>
                 </Show>
-
-                {/* Stage 6 Overlay: Output Split Curtain Comparison */}
-                <Show when={activeStage() === "output"}>
-                  <div
-                    class="curtain-bar-wrap"
-                    style={{ left: `${curtainPos() * 100}%` }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      setIsDraggingCurtain(true);
-                    }}
-                  >
-                    <div class="curtain-disc">⇄</div>
-                  </div>
-                </Show>
               </div>
             </Show>
           </div>
@@ -894,8 +971,27 @@ export default function App() {
           </div>
         </section>
 
-        {/* Right Column: Stage Inspector Panel */}
+        {/* Right Column: Unified Stage Inspector Panel (All Controls Scrollable & Permanently Expanded) */}
         <aside class="neo-inspector">
+          {/* Master Actions Bar */}
+          <div class="inspector-master-actions">
+            <button
+              class="neo-btn lime"
+              onClick={handleBatchAutoAnalyzeAll}
+              disabled={pages().length === 0 || isAnalyzing()}
+              title="Runs deskew and content box detection individually for each page"
+            >
+              ✨ Smart Auto-Analyze All Pages
+            </button>
+            <button
+              class="neo-btn purple sm"
+              onClick={startBatchProcessing}
+              disabled={pages().length === 0}
+            >
+              🚀 Export All Pages to Disk
+            </button>
+          </div>
+
           <Show
             when={activePage()}
             fallback={
@@ -906,28 +1002,25 @@ export default function App() {
               </div>
             }
           >
-            {/* Stage Banner */}
-            <div class="inspector-stage-banner">
-              <div class="stage-banner-icon">
-                {STAGES.find((s) => s.id === activeStage())?.icon}
-              </div>
-              <div>
-                <div class="stage-banner-title">
-                  {STAGES.find((s) => s.id === activeStage())?.name}
+            {/* Control Card 1: Orientation */}
+            <div
+              class={`neo-stage-card ${activeStage() === "orientation" ? "active" : ""}`}
+              onClick={() => setActiveStage("orientation")}
+            >
+              <div class="stage-card-header">
+                <div class="stage-card-header-left">
+                  <div class="stage-card-badge">1</div>
+                  <div class="stage-card-title-wrap">
+                    <span class="stage-card-title">↺ Orientation & Rotation</span>
+                    <span class="stage-card-desc">Rotate & flip scan orientation</span>
+                  </div>
                 </div>
-                <div class="stage-banner-desc">
-                  {STAGES.find((s) => s.id === activeStage())?.desc}
-                </div>
+                <span class="font-mono" style={{ "font-weight": "800", "font-size": "12px" }}>
+                  {activePage()?.orientation}°
+                </span>
               </div>
-            </div>
 
-            {/* Stage 1: Orientation */}
-            <Show when={activeStage() === "orientation"}>
-              <div class="neo-card">
-                <div class="neo-card-header">
-                  <span class="neo-card-title">Rotate Page</span>
-                  <span class="font-mono" style={{ "font-weight": "800" }}>{activePage()?.orientation}°</span>
-                </div>
+              <div class="stage-card-body">
                 <div class="neo-segmented-group">
                   <button class="neo-segment-btn" onClick={() => rotatePage(-90)}>
                     ↺ -90°
@@ -939,18 +1032,32 @@ export default function App() {
                     ↻ +90°
                   </button>
                 </div>
-                <button class="neo-btn purple" onClick={handleAutoOrientation}>
-                  ⚡ Auto Detect Orientation
-                </button>
-              </div>
-            </Show>
 
-            {/* Stage 2: Split Pages */}
-            <Show when={activeStage() === "split"}>
-              <div class="neo-card">
-                <div class="neo-card-header">
-                  <span class="neo-card-title">Spread Split Mode</span>
+                <div class="stage-action-btn-row">
+                  <button class="neo-btn sm" onClick={handleAutoOrientation}>
+                    ⚡ Auto-Detect Orientation (Current)
+                  </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Control Card 2: Page Spread & Split */}
+            <div
+              class={`neo-stage-card ${activeStage() === "split" ? "active" : ""}`}
+              onClick={() => setActiveStage("split")}
+            >
+              <div class="stage-card-header">
+                <div class="stage-card-header-left">
+                  <div class="stage-card-badge">2</div>
+                  <div class="stage-card-title-wrap">
+                    <span class="stage-card-title">✂ Page Spread & Split</span>
+                    <span class="stage-card-desc">Single page or book dual-spread cut</span>
+                  </div>
+                </div>
+                <span class="sticker-badge blue">{activePage()?.split_mode}</span>
+              </div>
+
+              <div class="stage-card-body">
                 <div class="neo-segmented-group">
                   <button
                     class={`neo-segment-btn ${activePage()?.split_mode === "single" ? "active" : ""}`}
@@ -977,35 +1084,47 @@ export default function App() {
                     <div class="slider-info-row">
                       <span class="slider-caption">Cutter Position (X)</span>
                       <span class="slider-val-tag">
-                        {activePage()?.split_x || Math.round((previewResult()?.width || 2000) / 2)} px
+                        {activePage()?.split_x || Math.round((previewResult()?.width || activePage()!.width) / 2)} px
                       </span>
                     </div>
                     <input
                       type="range"
                       min={100}
-                      max={previewResult()?.width || 3000}
-                      value={activePage()?.split_x || Math.round((previewResult()?.width || 2000) / 2)}
+                      max={previewResult()?.width || activePage()!.width || 3000}
+                      value={activePage()?.split_x || Math.round((previewResult()?.width || activePage()!.width) / 2)}
                       class="neo-range-slider"
                       onInput={(e) => updateSplitX(parseInt(e.currentTarget.value))}
                     />
                   </div>
                 </Show>
 
-                <button class="neo-btn orange" onClick={handleAutoSplit}>
-                  ✂ Auto Detect Split
-                </button>
-              </div>
-            </Show>
-
-            {/* Stage 3: Deskew */}
-            <Show when={activeStage() === "deskew"}>
-              <div class="neo-card">
-                <div class="neo-card-header">
-                  <span class="neo-card-title">Deskew Angle Calibration</span>
-                  <span class="slider-val-tag">
-                    {activePage()?.deskew_angle.toFixed(2)}°
-                  </span>
+                <div class="stage-action-btn-row">
+                  <button class="neo-btn sm orange" onClick={handleAutoSplit}>
+                    ✂ Auto-Detect Split Line (Current)
+                  </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Control Card 3: Deskew & Alignment */}
+            <div
+              class={`neo-stage-card ${activeStage() === "deskew" ? "active" : ""}`}
+              onClick={() => setActiveStage("deskew")}
+            >
+              <div class="stage-card-header">
+                <div class="stage-card-header-left">
+                  <div class="stage-card-badge">3</div>
+                  <div class="stage-card-title-wrap">
+                    <span class="stage-card-title">📐 Deskew & Alignment</span>
+                    <span class="stage-card-desc">Straighten text lines and scan tilt</span>
+                  </div>
+                </div>
+                <span class="slider-val-tag">
+                  {activePage()?.deskew_angle.toFixed(2)}°
+                </span>
+              </div>
+
+              <div class="stage-card-body">
                 <input
                   type="range"
                   min="-20.0"
@@ -1026,33 +1145,49 @@ export default function App() {
                     +0.2°
                   </button>
                 </div>
+
                 <div class="neo-toggle-box" onClick={() => setShowDeskewGrid(!showDeskewGrid())}>
                   <div>
-                    <div class="toggle-title-bold">Alignment Grid</div>
-                    <div class="toggle-sub-hint">Visual horizontal & vertical guide lines</div>
+                    <div class="toggle-title-bold">Alignment Grid Overlay</div>
+                    <div class="toggle-sub-hint">Visual horizontal & vertical alignment lines</div>
                   </div>
                   <div class={`neo-switch ${showDeskewGrid() ? "active" : ""}`}>
                     <div class="neo-switch-knob"></div>
                   </div>
                 </div>
-                <button class="neo-btn purple" onClick={handleAutoDeskew}>
-                  📐 Auto Straighten Deskew
-                </button>
-              </div>
-            </Show>
 
-            {/* Stage 4: Content Box */}
-            <Show when={activeStage() === "content"}>
-              <div class="neo-card">
-                <div class="neo-card-header">
-                  <span class="neo-card-title">Content Bounding Box</span>
-                  <Show when={activePage()?.content_box}>
-                    <span class="slider-val-tag">
-                      {activePage()!.content_box!.width}×{activePage()!.content_box!.height}
-                    </span>
-                  </Show>
+                <div class="batch-btn-row">
+                  <button class="neo-btn sm" onClick={handleAutoDeskew}>
+                    📐 Auto Straighten (Current)
+                  </button>
+                  <button class="neo-btn sm purple" onClick={handleBatchAutoDeskew} title="Calculates skew angle for each page individually">
+                    ✨ Straighten ALL (Per-Page)
+                  </button>
                 </div>
+              </div>
+            </div>
 
+            {/* Control Card 4: Content Bounding Box */}
+            <div
+              class={`neo-stage-card ${activeStage() === "content" ? "active" : ""}`}
+              onClick={() => setActiveStage("content")}
+            >
+              <div class="stage-card-header">
+                <div class="stage-card-header-left">
+                  <div class="stage-card-badge">4</div>
+                  <div class="stage-card-title-wrap">
+                    <span class="stage-card-title">⛶ Content Bounding Box</span>
+                    <span class="stage-card-desc">Interactive crop frame & margin detector</span>
+                  </div>
+                </div>
+                <Show when={activePage()?.content_box}>
+                  <span class="slider-val-tag">
+                    {activePage()!.content_box!.width}×{activePage()!.content_box!.height}
+                  </span>
+                </Show>
+              </div>
+
+              <div class="stage-card-body">
                 <div class="neo-segmented-group">
                   <button class="neo-segment-btn" onClick={() => applyContentPreset("full")}>
                     100% Full
@@ -1102,7 +1237,7 @@ export default function App() {
                           type="number"
                           value={activePage()!.content_box!.width}
                           onInput={(e) => {
-                            const val = parseInt(e.currentTarget.value) || 100;
+                            const val = parseInt(e.currentTarget.value) || 50;
                             setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, width: val } } : p));
                           }}
                         />
@@ -1116,7 +1251,7 @@ export default function App() {
                           type="number"
                           value={activePage()!.content_box!.height}
                           onInput={(e) => {
-                            const val = parseInt(e.currentTarget.value) || 100;
+                            const val = parseInt(e.currentTarget.value) || 50;
                             setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, height: val } } : p));
                           }}
                         />
@@ -1126,28 +1261,46 @@ export default function App() {
                   </div>
                 </Show>
 
-                <button class="neo-btn purple" onClick={handleAutoContentBox}>
-                  ⛶ Auto Detect Content (AI)
-                </button>
-              </div>
-            </Show>
-
-            {/* Stage 5: Margins */}
-            <Show when={activeStage() === "margins"}>
-              <div class="neo-card">
-                <div class="neo-card-header">
-                  <span class="neo-card-title">Margins (mm)</span>
+                <div class="batch-btn-row">
+                  <button class="neo-btn sm" onClick={handleAutoContentBox}>
+                    ⚡ Detect Box (Current)
+                  </button>
+                  <button class="neo-btn sm lime" onClick={handleBatchAutoContentBox} title="Detects unique bounding box for each page individually">
+                    ✨ Detect ALL (Per-Page)
+                  </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Control Card 5: Page Margins */}
+            <div
+              class={`neo-stage-card ${activeStage() === "margins" ? "active" : ""}`}
+              onClick={() => setActiveStage("margins")}
+            >
+              <div class="stage-card-header">
+                <div class="stage-card-header-left">
+                  <div class="stage-card-badge">5</div>
+                  <div class="stage-card-title-wrap">
+                    <span class="stage-card-title">📏 Page Margins</span>
+                    <span class="stage-card-desc">Uniform layout padding & borders</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stage-card-body">
                 <div class="neo-grid-2x2">
                   <div class="input-field-block">
-                    <span class="input-label-text">Top</span>
+                    <span class="input-label-text">Top Margin</span>
                     <div class="neo-unit-input">
                       <input
                         type="number"
                         value={activePage()?.margins.top || 10}
-                        onInput={(e) => updateMargins("top", parseFloat(e.currentTarget.value) || 0)}
+                        onInput={(e) => {
+                          const val = parseFloat(e.currentTarget.value) || 0;
+                          setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, top: val } } : p));
+                        }}
                       />
-                      <span class="unit-label">mm</span>
+                      <span class="unit-label">%</span>
                     </div>
                   </div>
                   <div class="input-field-block">
@@ -1156,20 +1309,26 @@ export default function App() {
                       <input
                         type="number"
                         value={activePage()?.margins.bottom || 10}
-                        onInput={(e) => updateMargins("bottom", parseFloat(e.currentTarget.value) || 0)}
+                        onInput={(e) => {
+                          const val = parseFloat(e.currentTarget.value) || 0;
+                          setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, bottom: val } } : p));
+                        }}
                       />
-                      <span class="unit-label">mm</span>
+                      <span class="unit-label">%</span>
                     </div>
                   </div>
                   <div class="input-field-block">
-                    <span class="input-label-text">Left</span>
+                    <span class="input-label-text">Left Margin</span>
                     <div class="neo-unit-input">
                       <input
                         type="number"
                         value={activePage()?.margins.left || 10}
-                        onInput={(e) => updateMargins("left", parseFloat(e.currentTarget.value) || 0)}
+                        onInput={(e) => {
+                          const val = parseFloat(e.currentTarget.value) || 0;
+                          setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, left: val } } : p));
+                        }}
                       />
-                      <span class="unit-label">mm</span>
+                      <span class="unit-label">%</span>
                     </div>
                   </div>
                   <div class="input-field-block">
@@ -1178,94 +1337,153 @@ export default function App() {
                       <input
                         type="number"
                         value={activePage()?.margins.right || 10}
-                        onInput={(e) => updateMargins("right", parseFloat(e.currentTarget.value) || 0)}
+                        onInput={(e) => {
+                          const val = parseFloat(e.currentTarget.value) || 0;
+                          setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, right: val } } : p));
+                        }}
                       />
-                      <span class="unit-label">mm</span>
+                      <span class="unit-label">%</span>
                     </div>
                   </div>
                 </div>
-              </div>
-            </Show>
 
-            {/* Stage 6: Output & Sauvola */}
-            <Show when={activeStage() === "output"}>
-              <div class="neo-card">
+                <div class="stage-action-btn-row">
+                  <button class="neo-btn sm" onClick={applyMarginsToAll}>
+                    📏 Apply Margins to All Pages
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Control Card 6: Output & Binarization */}
+            <div
+              class={`neo-stage-card ${activeStage() === "output" ? "active" : ""}`}
+              onClick={() => setActiveStage("output")}
+            >
+              <div class="stage-card-header">
+                <div class="stage-card-header-left">
+                  <div class="stage-card-badge">6</div>
+                  <div class="stage-card-title-wrap">
+                    <span class="stage-card-title">⚡ Output & Filters</span>
+                    <span class="stage-card-desc">Sauvola binarization, despeckle & dewarp</span>
+                  </div>
+                </div>
+                <span class="sticker-badge lime">{activePage()?.output_mode}</span>
+              </div>
+
+              <div class="stage-card-body">
                 <div class="neo-card-header">
-                  <span class="neo-card-title">Binarization Method</span>
+                  <span class="neo-card-title">Color Mode</span>
                 </div>
                 <div class="neo-segmented-group">
                   <button
-                    class={`neo-segment-btn ${activePage()?.binarization_method === "sauvola" ? "active" : ""}`}
+                    class={`neo-segment-btn ${activePage()?.output_mode === "bw" ? "active" : ""}`}
                     onClick={() => {
-                      setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, binarization_method: "sauvola" } : p));
+                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "bw" } : p)));
                       refreshPreview();
                     }}
                   >
-                    Sauvola
-                  </button>
-                  <button
-                    class={`neo-segment-btn ${activePage()?.binarization_method === "otsu" ? "active" : ""}`}
-                    onClick={() => {
-                      setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, binarization_method: "otsu" } : p));
-                      refreshPreview();
-                    }}
-                  >
-                    Otsu
+                    B/W Clean
                   </button>
                   <button
                     class={`neo-segment-btn ${activePage()?.output_mode === "grayscale" ? "active" : ""}`}
                     onClick={() => {
-                      setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, output_mode: "grayscale" } : p));
+                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "grayscale" } : p)));
                       refreshPreview();
                     }}
                   >
                     Grayscale
                   </button>
+                  <button
+                    class={`neo-segment-btn ${activePage()?.output_mode === "color" ? "active" : ""}`}
+                    onClick={() => {
+                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "color" } : p)));
+                      refreshPreview();
+                    }}
+                  >
+                    Color
+                  </button>
                 </div>
 
-                <div class="neo-slider-wrap">
-                  <div class="slider-info-row">
-                    <span class="slider-caption">Sauvola Coefficient (k)</span>
-                    <span class="slider-val-tag">{activePage()?.sauvola_k.toFixed(2)}</span>
+                <Show when={activePage()?.output_mode === "bw"}>
+                  <div class="neo-card-header">
+                    <span class="neo-card-title">Binarization Method</span>
                   </div>
-                  <input
-                    type="range"
-                    min="0.05"
-                    max="0.50"
-                    step="0.01"
-                    value={activePage()?.sauvola_k || 0.20}
-                    class="neo-range-slider"
-                    onInput={(e) => updateSauvola(parseFloat(e.currentTarget.value), activePage()?.sauvola_window || 35)}
-                  />
-                </div>
+                  <div class="neo-segmented-group">
+                    <button
+                      class={`neo-segment-btn ${activePage()?.binarization_method === "sauvola" ? "active" : ""}`}
+                      onClick={() => {
+                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, binarization_method: "sauvola" } : p)));
+                        refreshPreview();
+                      }}
+                    >
+                      Sauvola (Adaptive)
+                    </button>
+                    <button
+                      class={`neo-segment-btn ${activePage()?.binarization_method === "otsu" ? "active" : ""}`}
+                      onClick={() => {
+                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, binarization_method: "otsu" } : p)));
+                        refreshPreview();
+                      }}
+                    >
+                      Otsu (Global)
+                    </button>
+                  </div>
 
-                <div class="neo-slider-wrap">
-                  <div class="slider-info-row">
-                    <span class="slider-caption">Window Radius</span>
-                    <span class="slider-val-tag">{activePage()?.sauvola_window} px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="11"
-                    max="75"
-                    step="2"
-                    value={activePage()?.sauvola_window || 35}
-                    class="neo-range-slider"
-                    onInput={(e) => updateSauvola(activePage()?.sauvola_k || 0.20, parseInt(e.currentTarget.value))}
-                  />
-                </div>
+                  <Show when={activePage()?.binarization_method === "sauvola"}>
+                    <div class="neo-slider-wrap">
+                      <div class="slider-info-row">
+                        <span class="slider-caption">Sauvola Sensitivity (K)</span>
+                        <span class="slider-val-tag">{activePage()?.sauvola_k.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.05"
+                        max="0.50"
+                        step="0.01"
+                        value={activePage()?.sauvola_k || 0.25}
+                        class="neo-range-slider"
+                        onInput={(e) => {
+                          const val = parseFloat(e.currentTarget.value);
+                          setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, sauvola_k: val } : p)));
+                          debouncedRefreshPreview(120);
+                        }}
+                      />
+                    </div>
+
+                    <div class="neo-slider-wrap">
+                      <div class="slider-info-row">
+                        <span class="slider-caption">Window Radius</span>
+                        <span class="slider-val-tag">{activePage()?.sauvola_window} px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="50"
+                        step="2"
+                        value={activePage()?.sauvola_window || 15}
+                        class="neo-range-slider"
+                        onInput={(e) => {
+                          const val = parseInt(e.currentTarget.value);
+                          setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, sauvola_window: val } : p)));
+                          debouncedRefreshPreview(120);
+                        }}
+                      />
+                    </div>
+                  </Show>
+                </Show>
 
                 <div
                   class="neo-toggle-box"
                   onClick={() => {
                     const next = !activePage()?.despeckle;
-                    setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, despeckle: next } : p));
+                    setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, despeckle: next } : p)));
                     refreshPreview();
                   }}
                 >
                   <div>
-                    <div class="toggle-title-bold">Despeckling Filter</div>
-                    <div class="toggle-sub-hint">Filter dust and scanning noise</div>
+                    <div class="toggle-title-bold">Despeckle Noise Filter</div>
+                    <div class="toggle-sub-hint">Eliminate scan artifacts and dust dots</div>
                   </div>
                   <div class={`neo-switch ${activePage()?.despeckle ? "active" : ""}`}>
                     <div class="neo-switch-knob"></div>
@@ -1276,72 +1494,79 @@ export default function App() {
                   class="neo-toggle-box"
                   onClick={() => {
                     const next = !activePage()?.dewarp;
-                    setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, dewarp: next } : p));
+                    setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, dewarp: next } : p)));
                     refreshPreview();
                   }}
                 >
                   <div>
-                    <div class="toggle-title-bold">3D Cylindrical Dewarp</div>
-                    <div class="toggle-sub-hint">Flatten book spine curvature</div>
+                    <div class="toggle-title-bold">Dewarp Curvature</div>
+                    <div class="toggle-sub-hint">Flatten book binding curvature</div>
                   </div>
                   <div class={`neo-switch ${activePage()?.dewarp ? "active" : ""}`}>
                     <div class="neo-switch-knob"></div>
                   </div>
                 </div>
-              </div>
-            </Show>
 
-            {/* Batch Action Footer Card */}
-            <div class="neo-batch-card">
-              <span class="batch-card-title">Batch Processing</span>
-              <button class="neo-btn sm" onClick={applyStageToAll}>
-                ⚡ Apply Stage to All Pages
-              </button>
-              <button class="neo-btn lime" onClick={startBatchProcessing}>
-                🚀 Render All ({pages().length} Pages)
-              </button>
+                {/* Before/After Split Comparison Toggle */}
+                <div
+                  class="neo-toggle-box"
+                  onClick={() => setShowCurtainComparison(!showCurtainComparison())}
+                >
+                  <div>
+                    <div class="toggle-title-bold">Before / After Slider</div>
+                    <div class="toggle-sub-hint">Interactive split curtain comparison</div>
+                  </div>
+                  <div class={`neo-switch ${showCurtainComparison() ? "active" : ""}`}>
+                    <div class="neo-switch-knob"></div>
+                  </div>
+                </div>
+
+                <div class="batch-btn-row">
+                  <button class="neo-btn sm" onClick={refreshPreview}>
+                    ⚡ Render Output (Current)
+                  </button>
+                  <button class="neo-btn sm" onClick={applyOutputSettingsToAll}>
+                    ✨ Apply Settings to All
+                  </button>
+                </div>
+              </div>
             </div>
           </Show>
         </aside>
       </main>
 
-      {/* Batch Progress Modal */}
+      {/* Batch Processing Modal */}
       <Show when={showBatchModal()}>
         <div class="neo-modal-backdrop">
           <div class="neo-modal-box">
-            <div style={{ "display": "flex", "align-items": "center", "gap": "12px" }}>
-              <div style={{ "font-size": "28px" }}>⚙️</div>
-              <div>
-                <h3 class="font-heading" style={{ "font-size": "16px", "font-weight": "800" }}>Batch Processing</h3>
-                <span style={{ "font-size": "11px", "color": "var(--ink-muted)" }}>
-                  Multi-threaded Rust Rayon Engine
-                </span>
-              </div>
+            <div class="neo-card-header">
+              <span class="font-heading" style={{ "font-size": "16px", "font-weight": "800" }}>
+                🚀 Multithreaded Processing Engine
+              </span>
+              <span class="sticker-badge purple">Rayon Active</span>
             </div>
+
+            <p style={{ "font-size": "12px", "color": "var(--ink-muted)" }}>
+              Processing pages across all available CPU cores. Sauvola binarization, deskewing, and despeckle filters are being rendered.
+            </p>
 
             <div class="neo-progress-track">
               <div
                 class="neo-progress-bar"
-                style={{ width: `${batchProgress().percent}%` }}
+                style={{ width: `${Math.min(100, Math.max(5, analysisStatus().percent))}%` }}
               ></div>
             </div>
 
-            <div style={{ "display": "flex", "justify-content": "space-between", "font-family": "var(--font-mono)", "font-size": "12px", "font-weight": "700" }}>
-              <span>{batchProgress().message}</span>
-              <span>
-                {batchProgress().current} / {batchProgress().total} ({Math.round(batchProgress().percent)}%)
-              </span>
+            <div style={{ "display": "flex", "justify-content": "space-between", "font-family": "var(--font-mono)", "font-size": "11px" }}>
+              <span>{analysisStatus().message || "Processing scans..."}</span>
+              <span>{analysisStatus().current} / {analysisStatus().total}</span>
             </div>
 
-            <div style={{ "display": "flex", "justify-content": "flex-end", "margin-top": "6px" }}>
-              <button
-                class="neo-btn sm"
-                disabled={isBatchProcessing()}
-                onClick={() => setShowBatchModal(false)}
-              >
-                {isBatchProcessing() ? "Processing..." : "Close"}
+            <Show when={!isBatchProcessing()}>
+              <button class="neo-btn lime" onClick={() => setShowBatchModal(false)}>
+                ✓ Done (Close Window)
               </button>
-            </div>
+            </Show>
           </div>
         </div>
       </Show>
@@ -1351,6 +1576,7 @@ export default function App() {
         <For each={toasts()}>
           {(t) => (
             <div class={`neo-toast-item ${t.type}`}>
+              <span>{t.type === "success" ? "✓" : t.type === "error" ? "⚠" : "ℹ"}</span>
               <span>{t.text}</span>
             </div>
           )}

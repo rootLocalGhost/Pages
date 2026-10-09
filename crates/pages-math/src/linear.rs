@@ -1,5 +1,4 @@
 /// Multi-variable Linear Function: `F(x) = a^T * x + b`
-/// Ported from Scan Tailor's `LinearFunction`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinearFunction {
     pub a: Vec<f64>,

@@ -6,7 +6,6 @@ use crate::rect::Rect2d;
 /// `line1.p1 + s1 * line1.vector() == line2.p1 + s2 * line2.vector()`
 ///
 /// Returns `Some((s1, s2))` if the lines intersect, or `None` if they are parallel.
-/// Ported from Scan Tailor's `lineIntersectionScalar`.
 pub fn line_intersection_scalar(line1: Line2d, line2: Line2d) -> Option<(f64, f64)> {
     let p1 = line1.p1;
     let p2 = line2.p1;
@@ -36,7 +35,6 @@ pub fn line_intersection_point(line1: Line2d, line2: Line2d) -> Option<Point2d> 
 }
 
 /// Clips an infinite line by a rectangle, returning the segment inside the rectangle.
-/// Ported from Scan Tailor's `lineBoundedByRect`.
 pub fn line_bounded_by_rect(line: Line2d, rect: Rect2d) -> Option<Line2d> {
     let rect_lines = [
         Line2d::new(rect.top_left(), rect.top_right()),

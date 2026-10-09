@@ -2580,6 +2580,89 @@ dependencies = [
 ]
 
 [[package]]
+name = "pages-cli"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "image",
+ "pages-core",
+ "pages-imageproc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "pages-core"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "pages-dewarp",
+ "pages-imageproc",
+ "pages-math",
+ "rayon",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "pages-dewarp"
+version = "1.0.0"
+dependencies = [
+ "image",
+ "pages-imageproc",
+ "pages-math",
+ "rayon",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "pages-gui"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "image",
+ "num_cpus",
+ "pages-core",
+ "pages-dewarp",
+ "pages-imageproc",
+ "pages-math",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "pages-imageproc"
+version = "1.0.0"
+dependencies = [
+ "approx",
+ "image",
+ "pages-math",
+ "rayon",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "pages-math"
+version = "1.0.0"
+dependencies = [
+ "approx",
+ "serde",
+]
+
+[[package]]
 name = "pango"
 version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3101,89 +3184,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "scantailor-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "image",
- "scantailor-core",
- "scantailor-imageproc",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "scantailor-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image",
- "rayon",
- "scantailor-dewarp",
- "scantailor-imageproc",
- "scantailor-math",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "scantailor-dewarp"
-version = "0.1.0"
-dependencies = [
- "image",
- "rayon",
- "scantailor-imageproc",
- "scantailor-math",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "scantailor-gui"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "image",
- "num_cpus",
- "rayon",
- "scantailor-core",
- "scantailor-dewarp",
- "scantailor-imageproc",
- "scantailor-math",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
-name = "scantailor-imageproc"
-version = "0.1.0"
-dependencies = [
- "approx",
- "image",
- "rayon",
- "scantailor-math",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "scantailor-math"
-version = "0.1.0"
-dependencies = [
- "approx",
- "serde",
 ]
 
 [[package]]

@@ -1,8 +1,8 @@
-# Scan Tailor Universal (Rust Core)
+# Pages
 
-A high-performance, modular Rust port of the **Scan Tailor Universal** interactive post-processing engine for scanned book pages and documents.
+A high-performance, modular document restoration and post-processing engine and desktop studio written in pure Rust and TypeScript.
 
-This engine is completely decoupled from desktop UI frameworks, featuring a headless batch processing engine and CLI, ready for a modern **Tauri** desktop GUI in the future.
+Built from first mathematical and computer vision principles, **Pages** transforms raw digital scans, camera photos, and manuscripts into publication-ready, pristine, deskewed, cropped, and binarized documents.
 
 ---
 
@@ -10,81 +10,90 @@ This engine is completely decoupled from desktop UI frameworks, featuring a head
 
 ```
 .
-├── Cargo.toml               # Workspace manifest
+├── Cargo.toml               # Workspace manifest (MIT Licensed)
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml           # CI workflow (Linux, Windows)
 │       └── release.yml      # Automated GitHub Releases (Linux, Windows)
-└── crates/
-    ├── scantailor-math/     # 2D geometry, homography, splines, lines, polygons
-    ├── scantailor-imageproc/# Bit-packed BinaryImage, Sauvola & Otsu binarization, CCL, deskew, page split
-    ├── scantailor-dewarp/   # Cylindrical distortion models, curve fitting, backward grid remapping
-    ├── scantailor-core/     # Post-processing pipeline, Serde project state, Rayon parallel batch runner
-    └── scantailor-cli/      # High-performance headless CLI binary
+├── crates/
+│   ├── pages-math/          # 2D geometry, projective homography, splines, lines, polygons
+│   ├── pages-imageproc/     # Bit-packed BinaryImage, Sauvola & Otsu binarization, CCL, deskew, page split
+│   ├── pages-dewarp/        # Cylindrical distortion models, curve fitting, backward grid remapping
+│   ├── pages-core/          # Post-processing pipeline, Serde project state, Rayon parallel batch runner
+│   └── pages-cli/           # High-performance headless CLI binary
+├── src-tauri/               # Tauri v2 desktop shell
+└── src/                     # SolidJS Neo-Brutalist UI workstation
 ```
 
 ---
 
-## Features
+## Core Capabilities
 
-- **Geometric & Math Foundations (`scantailor-math`)**:
+- **Geometric & Mathematical Foundations (`pages-math`)**:
   - Exact 2D floating-point & integer primitives (`Point2D`, `Line2D`, `Rect2D`, `Polygon2D`).
   - Line projection and partitioning (`ToLineProjector`, `sides_of_line`).
-  - Line intersection and rectangle boundary clipping (`line_bounded_by_rect`).
-  - 3x3 projective homography with matrix inversion and 4-point DLT estimation (`Homography2D`, `AffineTransform2D`).
+  - Boundary clipping algorithms (`line_bounded_by_rect`).
+  - Projective homography matrix inversion and 4-point DLT estimation (`Homography2D`, `AffineTransform2D`).
   - Catmull-Rom cubic splines with tension control and equidistant polyline sampling (`CubicSpline2D`).
   - Multi-variable linear & quadratic function solvers and gradient estimators.
 
-- **High-Speed Image Processing (`scantailor-imageproc`)**:
-  - `BinaryImage`: Memory-efficient bit-packed raster format ($1 = \text{black/ink}$, $0 = \text{white/paper}$) with word-level bitwise manipulation.
-  - Adaptive Sauvola binarization with $O(1)$ computation via 2D integral tables.
+- **High-Speed Image Processing (`pages-imageproc`)**:
+  - `BinaryImage`: Memory-efficient bit-packed raster format ($1 = \text{black/ink}$, $0 = \text{white/paper}$) with 64-bit word manipulation.
+  - Adaptive Sauvola binarization with $O(1)$ constant time execution via 2D integral tables.
   - Global Otsu thresholding.
   - Binary morphological operators (`dilate`, `erode`, `open`, `close`) using rectangular structuring elements (`Brick`).
-  - Two-pass 8-connected Connected Component Labeling (`ConnectedComponentLabeler`) with union-find and noise `despeckle`.
+  - Two-pass 8-connected Connected Component Labeling (`ConnectedComponentLabeler`) with union-find and noise despeckling.
   - Automatic `SkewFinder`: Sub-tenth-of-a-degree deskew angle estimation via vertical shear projection variance and plateau centering.
-  - Automatic `PageSplitDetector`: Book gutter/spine seam detection for splitting 2-page scans into individual pages.
-  - `detect_content_box`: Automatic bounding-box detection ignoring edge shadows and scanner borders.
+  - Automatic `PageSplitDetector`: Book gutter/spine seam detection for splitting 2-page spreads into individual pages.
+  - `detect_content_box`: Automatic content bounding box detection isolating text blocks from scanner margins and borders.
 
-- **Curved Page Dewarping (`scantailor-dewarp`)**:
+- **Curved Page Dewarping (`pages-dewarp`)**:
   - Top and bottom curve parameterization with arc length integration (`DewarpCurve`).
   - 2.5D ruling-based cylindrical distortion model (`CylindricalSurfaceModel`).
   - Backward coordinate grid mapping with bilinear interpolation (`DewarpRemapper`).
 
-- **Batch Pipeline & Project State (`scantailor-core`)**:
-  - Multi-stage pipeline: `Orientation` ➔ `PageSplit` ➔ `Deskew` ➔ `SelectContent` ➔ `Margins` ➔ `Output`.
+- **Batch Pipeline & Project State (`pages-core`)**:
+  - 6-stage non-destructive pipeline: `Orientation` ➔ `PageSplit` ➔ `Deskew` ➔ `SelectContent` ➔ `Margins` ➔ `Output`.
   - Full multithreaded processing across CPU cores using `rayon`.
   - Serializable/deserializable project format (`Project`, `PageSettings`) in JSON.
 
+- **Desktop Studio (`pages-gui` / Tauri v2 & SolidJS)**:
+  - Neo-Brutalist responsive tactile workstation with Light & Dark themes.
+  - CamScanner-grade instant page switching and canvas zooming/panning.
+  - Interactive Before/After split curtain comparison slider.
+  - Scrollable control sidebar with live stage previews and batch processors.
+
 ---
 
-## How to Use the CLI
+## Building from Source
 
-### 1. Build from Source
-
-Ensure you have Rust (1.80+) installed:
+Ensure you have Rust (1.80+) and Bun installed:
 
 ```bash
 # Clone the repository
-git clone https://github.com/trufanov-nok/scantailor-universal.git
-cd scantailor-universal
+git clone https://github.com/your-username/pages.git
+cd pages
 
-# Run tests
+# Run all Rust workspace tests
 cargo test --workspace
 
-# Build the optimized release binary
-cargo build --release
-```
+# Build the headless CLI
+cargo build --release -p pages-cli
 
-The compiled binary will be located at:
-- **Windows**: `target\release\scantailor-cli.exe`
-- **Linux**: `target/release/scantailor-cli`
+# Run the desktop app in development
+bun install
+bun run tauri dev
+
+# Build the desktop release installer
+bun run tauri build
+```
 
 ---
 
-### 2. Command Line Options
+## Command Line Usage (`pages-cli`)
 
 ```
-Usage: scantailor-cli [OPTIONS] --input <INPUT> --output <OUTPUT>
+Usage: pages-cli [OPTIONS] --input <INPUT> --output <OUTPUT>
 
 Options:
   -i, --input <INPUT>                Input directory containing scan images or a single image file
@@ -97,76 +106,33 @@ Options:
   -V, --version                      Print version
 ```
 
----
+### CLI Examples
 
-### 3. Usage Examples
-
-#### Process a Folder of Book Scans
-Automatically detects whether pages are dual-page scans, splits them into individual pages, deskews text lines, selects content, and writes binarized output images:
-
+#### Batch Process a Folder of Scans
 ```bash
 # Windows
-.\target\release\scantailor-cli.exe -i "C:\Scans\RawBook" -o "C:\Scans\CleanedBook"
+.\target\release\pages-cli.exe -i "C:\Scans\RawBook" -o "C:\Scans\CleanedBook"
 
-# Linux
-./target/release/scantailor-cli -i /path/to/raw_scans -o /path/to/output
+# Linux / macOS
+./target/release/pages-cli -i /path/to/raw_scans -o /path/to/output
 ```
 
-#### Enforce Single Page or Two Pages Split Mode
-If all images are known to be two-page book spreads:
+#### Enforce Two-Page Book Spread Split
 ```bash
-./target/release/scantailor-cli -i ./scans -o ./output --layout two-pages
+./target/release/pages-cli -i ./scans -o ./output --layout two-pages
 ```
 
-If images are already single pages and should not be split:
+#### Save & Resume Project State
 ```bash
-./target/release/scantailor-cli -i ./scans -o ./output --layout single
-```
+# Save analyzed settings
+./target/release/pages-cli -i ./scans -o ./output --save-project book.json
 
-#### Custom DPI
-Set target output resolution (default is 300 DPI):
-```bash
-./target/release/scantailor-cli -i ./scans -o ./output --dpi 600
-```
-
-#### Save & Resume with Project Files
-Export the detected settings into a reusable JSON project file:
-```bash
-./target/release/scantailor-cli -i ./scans -o ./output --save-project my_book.json
-```
-
-Re-run or batch process using the saved project configuration:
-```bash
-./target/release/scantailor-cli -p my_book.json -o ./output
+# Resume or run using existing project configuration
+./target/release/pages-cli -p book.json -o ./output
 ```
 
 ---
 
-## Automated GitHub Releases
+## License
 
-This repository includes a GitHub Actions release workflow configured in [`.github/workflows/release.yml`](.github/workflows/release.yml).
-
-### Supported Platforms
-- **Linux x86_64** (`x86_64-unknown-linux-gnu`) ➔ `scantailor-cli-linux-x86_64.tar.gz`
-- **Windows x86_64** (`x86_64-pc-windows-msvc`) ➔ `scantailor-cli-windows-x86_64.zip`
-
-### How to Trigger a Release
-
-#### Method 1: Push a Version Tag (Recommended)
-Tag your commit with a version starting with `v` and push it:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-GitHub Actions will automatically:
-1. Build optimized binaries on both Linux and Windows runners.
-2. Package the binaries with `README.md` and `LICENSE`.
-3. Create a new GitHub Release with release notes and attach the compiled archives.
-
-#### Method 2: Manual Trigger (`workflow_dispatch`)
-1. Go to your repository on GitHub.
-2. Click on the **Actions** tab.
-3. Select the **Release** workflow from the left sidebar.
-4. Click **Run workflow** on the `master` (or `main`) branch.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.

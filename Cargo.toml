@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/scantailor-math",
-    "crates/scantailor-imageproc",
-    "crates/scantailor-dewarp",
-    "crates/scantailor-core",
-    "crates/scantailor-cli",
+    "crates/pages-math",
+    "crates/pages-imageproc",
+    "crates/pages-dewarp",
+    "crates/pages-core",
+    "crates/pages-cli",
     "src-tauri",
 ]
 exclude = [
@@ -13,10 +13,10 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-authors = ["Scan Tailor Universal Contributors"]
-license = "GPL-3.0-or-later"
+authors = ["Pages Team"]
+license = "MIT"
 
 [workspace.dependencies]
 thiserror = "1.0"

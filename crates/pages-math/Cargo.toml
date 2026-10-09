@@ -1,5 +1,5 @@
 [package]
-name = "scantailor-math"
+name = "pages-math"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

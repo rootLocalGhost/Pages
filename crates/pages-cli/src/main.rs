@@ -1,5 +1,5 @@
 use clap::{Parser, ValueEnum};
-use scantailor_core::{BatchProcessor, PageSettings, Project, SplitMode};
+use pages_core::{BatchProcessor, PageSettings, Project, SplitMode};
 use serde::Serialize;
 use std::path::PathBuf;
 
@@ -12,9 +12,9 @@ enum CliLayout {
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "scantailor-cli",
+    name = "pages-cli",
     version,
-    about = "Scan Tailor Universal CLI - Interactive post-processing tool for scanned pages (Rust port)"
+    about = "Pages CLI - High-performance document & book post-processing engine"
 )]
 struct Args {
     /// Input directory containing scan images or a single image file

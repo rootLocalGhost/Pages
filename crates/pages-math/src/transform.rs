@@ -1,8 +1,6 @@
 use crate::point::Point2d;
 
 /// 3x3 Projective Homography Transform.
-///
-/// Ported from Scan Tailor's `HomographicTransform<2, double>`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Homography2D {
     // Row-major 3x3 matrix:

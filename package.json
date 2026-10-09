@@ -1,7 +1,8 @@
 {
-  "name": "scantailor-next",
+  "name": "pages",
   "version": "0.2.0",
   "description": "Interactive Book & Document Post-Processing Studio (Pure Rust + SolidJS + Tauri v2)",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "start": "bun run tauri dev",

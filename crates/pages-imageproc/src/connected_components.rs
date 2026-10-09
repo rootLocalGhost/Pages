@@ -1,5 +1,5 @@
 use crate::binary_image::BinaryImage;
-use scantailor_math::{Point2d, Point2i, Rect2i};
+use pages_math::{Point2d, Point2i, Rect2i};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConnectedComponent {

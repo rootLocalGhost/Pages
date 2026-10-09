@@ -10,8 +10,6 @@ pub struct SkewResult {
 }
 
 /// Estimates skew angle of a document image using projection profile variance after vertical shearing.
-///
-/// Ported from Scan Tailor's `SkewFinder` (Joseph Artsimovich).
 pub struct SkewFinder {
     pub max_angle_deg: f64,
     pub coarse_step_deg: f64,

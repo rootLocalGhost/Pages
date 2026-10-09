@@ -1,10 +1,8 @@
 use crate::cylinder_model::CylindricalSurfaceModel;
 use image::{GrayImage, Luma};
-use scantailor_imageproc::BinaryImage;
+use pages_imageproc::BinaryImage;
 
 /// Performs backward pixel remapping from warped image coordinates to flattened target coordinates.
-///
-/// Ported from Scan Tailor's `RasterDewarper`.
 pub struct DewarpRemapper;
 
 impl DewarpRemapper {
@@ -94,7 +92,7 @@ impl DewarpRemapper {
 mod tests {
     use super::*;
     use crate::curve::DewarpCurve;
-    use scantailor_math::Point2d;
+    use pages_math::Point2d;
 
     #[test]
     fn test_dewarp_remapper() {

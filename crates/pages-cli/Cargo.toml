@@ -1,12 +1,16 @@
 [package]
-name = "scantailor-cli"
+name = "pages-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "pages-cli"
+path = "src/main.rs"
+
 [dependencies]
-scantailor-core = { path = "../scantailor-core" }
-scantailor-imageproc = { path = "../scantailor-imageproc" }
+pages-core = { path = "../pages-core" }
+pages-imageproc = { path = "../pages-imageproc" }
 clap = { workspace = true, features = ["derive"] }
 image.workspace = true
 anyhow.workspace = true

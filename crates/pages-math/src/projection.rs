@@ -2,8 +2,6 @@ use crate::line::Line2d;
 use crate::point::Point2d;
 
 /// Projects points onto an infinite 2D line.
-///
-/// Ported from Scan Tailor's `ToLineProjector` (Joseph Artsimovich).
 #[derive(Debug, Clone, Copy)]
 pub struct ToLineProjector {
     origin: Point2d,
@@ -59,8 +57,6 @@ impl ToLineProjector {
 /// - `> 0` if both points are strictly on the same side
 /// - `< 0` if they are on opposite sides
 /// - `0` if at least one point lies on the line
-///
-/// Ported from Scan Tailor's `sidesOfLine`.
 pub fn sides_of_line(line: Line2d, p1: Point2d, p2: Point2d) -> f64 {
     let normal = match line.normal_vector() {
         Some(n) => n,

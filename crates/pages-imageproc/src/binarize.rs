@@ -1,9 +1,7 @@
 use crate::binary_image::BinaryImage;
 use image::GrayImage;
 
-/// Computes optimal global threshold using Otsu's method.
-///
-/// Ported from Scan Tailor's `binarizeOtsu`.
+/// Computes optimal global threshold using Otsu's method (N. Otsu, IEEE TSMC, 1979).
 pub fn otsu_threshold(gray: &GrayImage) -> u8 {
     let mut hist = [0u64; 256];
     for pixel in gray.pixels() {
@@ -59,12 +57,10 @@ pub fn binarize_otsu(gray: &GrayImage, delta: i32) -> BinaryImage {
     BinaryImage::from_gray_image(gray, threshold)
 }
 
-/// Sauvola's adaptive document image binarization method.
+/// Sauvola's adaptive document image binarization method (J. Sauvola & M. Pietikäinen, 2000).
 ///
 /// `T(x, y) = mean * (1.0 + k * (std_dev / 128.0 - 1.0))`
 /// Uses 2D integral images for O(1) local mean and standard deviation computation.
-///
-/// Ported from Scan Tailor's `binarizeSauvola`.
 pub fn binarize_sauvola(
     gray: &GrayImage,
     window_radius: u32,

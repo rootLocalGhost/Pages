@@ -1,10 +1,10 @@
 use crate::project::{Orientation, OutputMode, PageSettings, SplitMode};
 use image::{DynamicImage, GenericImageView, GrayImage};
-use scantailor_imageproc::{
+use pages_imageproc::{
     binarize_otsu, binarize_sauvola, detect_content_box, rotate_binary_image, BinaryImage,
     PageLayoutMode, PageSplitDetector, SkewFinder,
 };
-use scantailor_math::Rect2i;
+use pages_math::Rect2i;
 
 #[derive(Debug, Clone)]
 pub struct ProcessedPage {

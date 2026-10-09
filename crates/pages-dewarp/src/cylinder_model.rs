@@ -1,12 +1,10 @@
 use crate::curve::DewarpCurve;
-use scantailor_math::Point2d;
+use pages_math::Point2d;
 
 /// 2.5D Cylindrical surface distortion model.
 ///
 /// Models a page curled into the book spine, defined by a top boundary curve
-/// and a bottom boundary curve.
-///
-/// Ported from Scan Tailor's `CylindricalSurfaceDewarper`.
+/// and a bottom boundary curve using cylindrical parametric transformation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CylindricalSurfaceModel {
     pub top_curve: DewarpCurve,

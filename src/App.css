@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ScanTailor Next - Modern Neo-Brutalist Design System
+   Pages - Modern Neo-Brutalist Design System
    High-Contrast Tactile Engineering Workstation (Light & Dark Mode)
    ========================================================================== */
 
@@ -347,73 +347,127 @@ input, button, select, textarea {
 .neo-btn.orange:hover { background: var(--neo-orange-hover); }
 
 /* ==========================================================================
-   Pipeline Stepper Banner
+   Animated Neo-Brutalist Processing Banner
    ========================================================================== */
-.neo-stepper-bar {
+.neo-processing-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 20px;
-  background: var(--bg-surface);
+  background: var(--bg-surface-elevated);
   border-bottom: var(--border-width) solid var(--border-color);
-  gap: 12px;
-  overflow-x: auto;
+  gap: 16px;
   flex-shrink: 0;
+  animation: slideDownBanner 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 0px rgba(0,0,0,0.08);
+  z-index: 40;
 }
 
-.stepper-tabs {
+@keyframes slideDownBanner {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.processing-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
 }
 
-.stage-tab-btn {
+.processing-spinner {
+  display: inline-block;
+  animation: spinSlow 1.5s linear infinite;
+  font-size: 16px;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.processing-progress-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 600px;
+}
+
+.neo-progress-track.banner {
+  height: 16px;
+  border-radius: var(--radius-pill);
+  box-shadow: inset 1px 1px 0px rgba(0,0,0,0.15);
+  background: var(--bg-surface);
+}
+
+.neo-progress-fill.striped {
+  height: 100%;
+  background-color: var(--neo-lime);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.12),
+    rgba(0, 0, 0, 0.12) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  background-size: 28px 28px;
+  animation: neoStripesMove 1s linear infinite;
+  border-right: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-pill);
+  transition: width 150ms ease;
+}
+
+@keyframes neoStripesMove {
+  from { background-position: 0 0; }
+  to { background-position: 28px 0; }
+}
+
+.processing-percent-chip {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 12px;
+  padding: 2px 8px;
+  background: var(--ink);
+  color: var(--ink-inverse);
+  border-radius: var(--radius-xs);
+  border: 1.5px solid var(--border-color);
+}
+
+/* Canvas Floating Loading Pill */
+.canvas-loading-pill {
+  position: absolute;
+  top: 18px;
+  right: 18px;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
-  background: var(--bg-surface-elevated);
+  background: var(--bg-surface);
   border: var(--border-width) solid var(--border-color);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-hard-sm);
-  color: var(--ink-muted);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-hard);
   font-family: var(--font-heading);
-  font-weight: 700;
   font-size: 12px;
-  cursor: pointer;
-  transition: all 120ms var(--anim-snappy);
-}
-
-.stage-tab-btn:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: var(--shadow-hard);
-  color: var(--ink);
-}
-
-.stage-tab-btn.active {
-  background: var(--neo-lime);
-  color: #18181b;
-  transform: translate(-2px, -2px);
-  box-shadow: var(--shadow-hard);
-}
-
-.stage-index-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-xs);
-  background: var(--ink);
-  color: var(--ink-inverse);
-  font-family: var(--font-mono);
-  font-size: 11px;
   font-weight: 800;
+  color: var(--ink);
+  z-index: 30;
+  animation: pulsePill 1.2s ease-in-out infinite alternate;
 }
 
-.stage-tab-btn.active .stage-index-badge {
-  background: #18181b;
-  color: var(--neo-lime);
+@keyframes pulsePill {
+  from { transform: scale(0.98); box-shadow: var(--shadow-hard-sm); }
+  to { transform: scale(1.02); box-shadow: var(--shadow-hard); }
 }
 
 /* ==========================================================================
@@ -421,14 +475,15 @@ input, button, select, textarea {
    ========================================================================== */
 .neo-workspace-grid {
   display: grid;
-  grid-template-columns: 310px 1fr 360px;
-  height: calc(100vh - 120px);
+  grid-template-columns: 310px 1fr 390px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg-app);
 }
 
 .neo-workspace-grid.filmstrip-collapsed {
-  grid-template-columns: 56px 1fr 360px;
+  grid-template-columns: 56px 1fr 390px;
 }
 
 /* ==========================================================================
@@ -807,13 +862,76 @@ input, button, select, textarea {
 }
 
 /* --------------------------------------------------------------------------
-   Stage 6: Output Curtain Split
+   Stage 6: Functional Before/After Curtain Split Container
    -------------------------------------------------------------------------- */
+.curtain-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.curtain-before-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.curtain-after-wrap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.curtain-after-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.curtain-label {
+  position: absolute;
+  top: 14px;
+  padding: 4px 10px;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-hard-sm);
+  z-index: 15;
+  pointer-events: none;
+}
+
+.curtain-label.before {
+  left: 14px;
+  background: var(--neo-yellow);
+  color: #18181b;
+}
+
+.curtain-label.after {
+  right: 14px;
+  background: var(--neo-lime);
+  color: #18181b;
+}
+
 .curtain-bar-wrap {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 3px;
+  width: 4px;
   background: var(--ink);
   pointer-events: auto;
   cursor: ew-resize;
@@ -821,21 +939,28 @@ input, button, select, textarea {
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 25;
 }
 
 .curtain-disc {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   background: var(--neo-lime);
   border: var(--border-width) solid var(--border-color);
   border-radius: 50%;
-  box-shadow: var(--shadow-hard-sm);
+  box-shadow: var(--shadow-hard);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 12px;
+  font-size: 14px;
   color: #18181b;
+  cursor: grab;
+}
+
+.curtain-disc:active {
+  cursor: grabbing;
+  transform: scale(1.08);
 }
 
 /* Floating Studio HUD */
@@ -916,6 +1041,119 @@ input, button, select, textarea {
 .stage-banner-desc {
   font-size: 11px;
   color: var(--ink-muted);
+}
+
+/* Neo Stage Control Card (Always Expanded & Cleanly Styled) */
+.neo-stage-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hard-sm);
+  overflow: hidden;
+  transition: all 120ms var(--anim-snappy);
+}
+
+.neo-stage-card:hover {
+  box-shadow: var(--shadow-hard);
+}
+
+.neo-stage-card.active {
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-hard);
+}
+
+.stage-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-surface-elevated);
+  user-select: none;
+  cursor: pointer;
+  border-bottom: var(--border-width) solid var(--border-color);
+}
+
+.neo-stage-card.active .stage-card-header {
+  background: var(--neo-lime-light);
+}
+
+.stage-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stage-card-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.neo-stage-card.active .stage-card-badge {
+  background: var(--neo-lime);
+  color: #18181b;
+  box-shadow: 1px 1px 0px var(--border-color);
+}
+
+.stage-card-title-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.stage-card-title {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.stage-card-desc {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.stage-card-body {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 12px;
+  background: var(--bg-card);
+}
+
+.batch-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stage-action-btn-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.inspector-master-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-surface-elevated);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hard-sm);
 }
 
 /* Neo Control Card */

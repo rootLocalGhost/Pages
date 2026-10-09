@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ScanTailor Next",
-  "mainBinaryName": "scantailor-next",
-  "version": "0.2.0",
-  "identifier": "com.scantailor.next",
+  "productName": "Pages",
+  "mainBinaryName": "pages",
+  "version": "1.0.0",
+  "identifier": "app.pages.studio",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1430",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ScanTailor Next — Book & Document Post-Processing Studio",
+        "title": "Pages — Document Studio",
         "width": 1360,
         "height": 860,
         "minWidth": 1024,

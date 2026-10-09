@@ -1,4 +1,4 @@
-use scantailor_math::Rect2i;
+use pages_math::Rect2i;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
