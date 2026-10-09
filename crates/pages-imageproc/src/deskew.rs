@@ -45,15 +45,15 @@ impl SkewFinder {
         let step_x = 2;
         for x in (0..w).step_by(step_x) {
             let dy = ((x as f64 - x_center) * tg).round() as i32;
-            for y in 0..h {
+            for (y, count) in row_black_counts.iter_mut().enumerate() {
                 let src_y = y as i32 - dy;
                 if src_y >= 0 && src_y < h as i32 && img.get_pixel(x as u32, src_y as u32) {
-                    row_black_counts[y] += 1;
+                    *count += 1;
                 }
             }
         }
 
-        // Sum squared differences between adjacent lines (matching Scan Tailor's calcScore)
+        // Sum squared differences between adjacent lines for projection profile variance
         let mut score = 0.0;
         for y in 1..h {
             let diff = row_black_counts[y] as f64 - row_black_counts[y - 1] as f64;
@@ -207,7 +207,7 @@ mod tests {
         for base_y in [70.0, 120.0, 170.0, 220.0] {
             for x in 40..260 {
                 let y = (base_y + (x as f64 - cx) * tan_tilt).round() as i32;
-                if y >= 0 && y < 300 {
+                if (0..300).contains(&y) {
                     img.set_pixel(x, y as u32, true);
                 }
             }

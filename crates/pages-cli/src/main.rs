@@ -63,10 +63,7 @@ enum JsonEvent<'a> {
         elapsed_sec: f64,
     },
     #[serde(rename = "error")]
-    Error {
-        success: bool,
-        error: &'a str,
-    },
+    Error { success: bool, error: &'a str },
 }
 
 fn emit_json<T: Serialize>(event: &T) {

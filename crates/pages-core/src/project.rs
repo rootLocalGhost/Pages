@@ -124,7 +124,8 @@ mod tests {
     #[test]
     fn test_project_serialization() {
         let mut proj = Project::new(PathBuf::from("/out"));
-        proj.pages.push(PageSettings::new(PathBuf::from("p1.png"), 1));
+        proj.pages
+            .push(PageSettings::new(PathBuf::from("p1.png"), 1));
 
         let json = serde_json::to_string(&proj).unwrap();
         let loaded: Project = serde_json::from_str(&json).unwrap();

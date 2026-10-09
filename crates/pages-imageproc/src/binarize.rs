@@ -61,12 +61,7 @@ pub fn binarize_otsu(gray: &GrayImage, delta: i32) -> BinaryImage {
 ///
 /// `T(x, y) = mean * (1.0 + k * (std_dev / 128.0 - 1.0))`
 /// Uses 2D integral images for O(1) local mean and standard deviation computation.
-pub fn binarize_sauvola(
-    gray: &GrayImage,
-    window_radius: u32,
-    k: f64,
-    delta: i32,
-) -> BinaryImage {
+pub fn binarize_sauvola(gray: &GrayImage, window_radius: u32, k: f64, delta: i32) -> BinaryImage {
     let (width, height) = gray.dimensions();
     let w = width as usize;
     let h = height as usize;
@@ -146,7 +141,7 @@ mod tests {
         }
 
         let t = otsu_threshold(&gray);
-        assert!(t >= 50 && t <= 200);
+        assert!((50..=200).contains(&t));
         let bin = binarize_otsu(&gray, 0);
         assert_eq!(bin.count_black_pixels(), 5000);
     }

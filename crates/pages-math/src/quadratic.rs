@@ -35,13 +35,13 @@ impl QuadraticFunction {
         let n = self.num_vars;
         let mut sum = self.c;
 
-        for i in 0..n {
-            sum += self.b[i] * x[i];
+        for (i, &xi) in x.iter().enumerate().take(n) {
+            sum += self.b[i] * xi;
             let mut ax_i = 0.0;
-            for j in 0..n {
-                ax_i += self.a[i * n + j] * x[j];
+            for (j, &xj) in x.iter().enumerate().take(n) {
+                ax_i += self.a[i * n + j] * xj;
             }
-            sum += x[i] * ax_i;
+            sum += xi * ax_i;
         }
 
         sum
@@ -53,9 +53,9 @@ impl QuadraticFunction {
         let n = self.num_vars;
         let mut grad = self.b.clone();
 
-        for i in 0..n {
-            for j in 0..n {
-                grad[i] += (self.a[i * n + j] + self.a[j * n + i]) * x[j];
+        for (i, grad_i) in grad.iter_mut().enumerate().take(n) {
+            for (j, &xj) in x.iter().enumerate().take(n) {
+                *grad_i += (self.a[i * n + j] + self.a[j * n + i]) * xj;
             }
         }
 
@@ -64,11 +64,11 @@ impl QuadraticFunction {
 
     pub fn add_assign(&mut self, other: &Self) {
         assert_eq!(self.num_vars, other.num_vars, "Dimension mismatch");
-        for i in 0..self.a.len() {
-            self.a[i] += other.a[i];
+        for (ai, &o_ai) in self.a.iter_mut().zip(other.a.iter()) {
+            *ai += o_ai;
         }
-        for i in 0..self.b.len() {
-            self.b[i] += other.b[i];
+        for (bi, &o_bi) in self.b.iter_mut().zip(other.b.iter()) {
+            *bi += o_bi;
         }
         self.c += other.c;
     }

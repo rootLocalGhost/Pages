@@ -1,11 +1,11 @@
 use image::{DynamicImage, ImageReader};
-use rayon::prelude::*;
 use pages_dewarp::{CylindricalSurfaceModel, DewarpCurve, DewarpRemapper};
 use pages_imageproc::{
     binarize_otsu, binarize_sauvola, detect_content_box, rotate_binary_image,
-    PageLayoutMode, PageSplitDetector, SkewFinder, ConnectedComponentLabeler,
+    ConnectedComponentLabeler, PageLayoutMode, PageSplitDetector, SkewFinder,
 };
 use pages_math::Point2d;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -48,14 +48,14 @@ pub struct PageItem {
     pub file_name: String,
     pub width: u32,
     pub height: u32,
-    pub orientation: u32, // 0, 90, 180, 270
+    pub orientation: u32,   // 0, 90, 180, 270
     pub split_mode: String, // "auto", "single", "two-pages"
     pub split_x: Option<i32>,
     pub deskew_angle: f64,
     pub auto_deskew_angle: Option<f64>,
     pub content_box: Option<ContentBoxDto>,
     pub margins: MarginsDto,
-    pub output_mode: String, // "bw", "grayscale", "color"
+    pub output_mode: String,         // "bw", "grayscale", "color"
     pub binarization_method: String, // "sauvola", "wolf", "otsu"
     pub sauvola_k: f64,
     pub sauvola_window: u32,
@@ -147,20 +147,18 @@ fn import_images(paths: Vec<String>) -> Result<Vec<PageItem>, String> {
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| format!("page_{:04}", idx + 1));
 
-            let reader = ImageReader::open(&path)
+            let reader = ImageReader::open(path)
                 .map_err(|e| format!("Cannot open {}: {}", path_str, e))?
                 .with_guessed_format()
                 .map_err(|e| format!("Cannot format {}: {}", path_str, e))?;
 
-            let (width, height) = reader
-                .into_dimensions()
-                .unwrap_or_else(|_| (1200, 1600));
+            let (width, height) = reader.into_dimensions().unwrap_or((1200, 1600));
 
             // Generate small thumbnail for filmstrip and base preview for instant UI interactions
             let thumb_path = cache_dir.join(format!("thumb_{:x}.jpg", hash_str(&path_str)));
             let base_path = cache_dir.join(format!("base_{:x}.jpg", hash_str(&path_str)));
             if !thumb_path.exists() || !base_path.exists() {
-                if let Ok(img) = image::open(&path) {
+                if let Ok(img) = image::open(path) {
                     if !thumb_path.exists() {
                         let thumb = img.thumbnail(220, 300);
                         let _ = thumb.save(&thumb_path);
@@ -211,19 +209,18 @@ async fn auto_detect_orientation(image_path: String) -> Result<u32, String> {
             .map_err(|e| e.to_string())?
             .with_guessed_format()
             .map_err(|e| e.to_string())?;
-        let (w, h) = reader.into_dimensions().unwrap_or((1200, 1600));
-        if w > h {
-            Ok(0)
-        } else {
-            Ok(0)
-        }
+        let _ = reader.into_dimensions();
+        Ok(0)
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-async fn auto_detect_split(image_path: String, orientation: Option<u32>) -> Result<SplitResultDto, String> {
+async fn auto_detect_split(
+    image_path: String,
+    orientation: Option<u32>,
+) -> Result<SplitResultDto, String> {
     tokio::task::spawn_blocking(move || {
         let orientation = orientation.unwrap_or(0);
         let img = image::open(&image_path).map_err(|e| e.to_string())?;
@@ -284,7 +281,10 @@ async fn auto_detect_split(image_path: String, orientation: Option<u32>) -> Resu
     .map_err(|e| e.to_string())?
 }
 
-fn load_working_image(cache_dir: &Path, file_path: &str) -> Result<(DynamicImage, f64, u32, u32), String> {
+fn load_working_image(
+    cache_dir: &Path,
+    file_path: &str,
+) -> Result<(DynamicImage, f64, u32, u32), String> {
     let base_path = cache_dir.join(format!("base_{:x}.jpg", hash_str(file_path)));
     if base_path.exists() {
         if let Ok(img) = image::open(&base_path) {
@@ -409,7 +409,10 @@ async fn batch_auto_detect_content(
                         current: done,
                         total,
                         percent: pct,
-                        message: format!("Detecting content box for page {}/{} individually...", done, total),
+                        message: format!(
+                            "Detecting content box for page {}/{} individually...",
+                            done, total
+                        ),
                     },
                 );
 
@@ -518,7 +521,10 @@ async fn batch_auto_analyze_all(
                         current: done,
                         total,
                         percent: pct,
-                        message: format!("Auto-analyzing page {}/{} (Deskew & Content)...", done, total),
+                        message: format!(
+                            "Auto-analyzing page {}/{} (Deskew & Content)...",
+                            done, total
+                        ),
                     },
                 );
 
@@ -533,7 +539,10 @@ async fn batch_auto_analyze_all(
 }
 
 #[tauri::command]
-async fn generate_stage_preview(page: PageItem, stage: String) -> Result<StagePreviewResult, String> {
+async fn generate_stage_preview(
+    page: PageItem,
+    stage: String,
+) -> Result<StagePreviewResult, String> {
     tokio::task::spawn_blocking(move || {
         let cache_dir = get_preview_cache_dir();
 
@@ -670,7 +679,12 @@ async fn generate_stage_preview(page: PageItem, stage: String) -> Result<StagePr
                         Point2d::new(w * 0.5, h - 12.0),
                         Point2d::new(w, h),
                     ]);
-                    let model = CylindricalSurfaceModel::new(top_curve, bottom_curve, gray.width(), gray.height());
+                    let model = CylindricalSurfaceModel::new(
+                        top_curve,
+                        bottom_curve,
+                        gray.width(),
+                        gray.height(),
+                    );
                     gray = DewarpRemapper::dewarp_gray(&gray, &model);
                 }
 

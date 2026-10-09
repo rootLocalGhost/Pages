@@ -25,16 +25,20 @@ impl LinearFunction {
     pub fn evaluate(&self, x: &[f64]) -> f64 {
         assert_eq!(self.a.len(), x.len(), "Dimension mismatch in evaluate");
         let mut sum = self.b;
-        for i in 0..self.a.len() {
-            sum += self.a[i] * x[i];
+        for (&ai, &xi) in self.a.iter().zip(x.iter()) {
+            sum += ai * xi;
         }
         sum
     }
 
     pub fn add_assign(&mut self, other: &Self) {
-        assert_eq!(self.a.len(), other.a.len(), "Dimension mismatch in addition");
-        for i in 0..self.a.len() {
-            self.a[i] += other.a[i];
+        assert_eq!(
+            self.a.len(),
+            other.a.len(),
+            "Dimension mismatch in addition"
+        );
+        for (ai, &o_ai) in self.a.iter_mut().zip(other.a.iter()) {
+            *ai += o_ai;
         }
         self.b += other.b;
     }

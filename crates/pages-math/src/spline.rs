@@ -50,13 +50,7 @@ impl CubicSpline2D {
     }
 
     /// Computes point on a single Catmull-Rom segment with tension = 0.5.
-    fn catmull_rom_segment(
-        p0: Point2d,
-        p1: Point2d,
-        p2: Point2d,
-        p3: Point2d,
-        t: f64,
-    ) -> Point2d {
+    fn catmull_rom_segment(p0: Point2d, p1: Point2d, p2: Point2d, p3: Point2d, t: f64) -> Point2d {
         let t2 = t * t;
         let t3 = t2 * t;
 

@@ -88,9 +88,7 @@ impl Pipeline {
             // Stage 6: Margins & Output Cropping
             let (out_bin, out_gray) = match settings.output_mode {
                 OutputMode::BlackAndWhite => (Some(deskewed_bin), None),
-                OutputMode::Grayscale | OutputMode::Color => {
-                    (None, Some(sub_gray))
-                }
+                OutputMode::Grayscale | OutputMode::Color => (None, Some(sub_gray)),
             };
 
             results.push(ProcessedPage {

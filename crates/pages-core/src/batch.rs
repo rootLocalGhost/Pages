@@ -50,8 +50,10 @@ impl BatchProcessor {
                 let img = image::open(&page_settings.source_path)
                     .with_context(|| format!("Failed to open {:?}", page_settings.source_path))?;
 
-                let processed_pages = Pipeline::process_image(img, page_settings)
-                    .with_context(|| format!("Failed processing {:?}", page_settings.source_path))?;
+                let processed_pages =
+                    Pipeline::process_image(img, page_settings).with_context(|| {
+                        format!("Failed processing {:?}", page_settings.source_path)
+                    })?;
 
                 let mut page_outputs = Vec::new();
                 for p in processed_pages {

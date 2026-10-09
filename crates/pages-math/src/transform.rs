@@ -19,11 +19,7 @@ impl Default for Homography2D {
 impl Homography2D {
     pub const fn identity() -> Self {
         Self {
-            m: [
-                1.0, 0.0, 0.0,
-                0.0, 1.0, 0.0,
-                0.0, 0.0, 1.0,
-            ],
+            m: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
         }
     }
 
@@ -34,11 +30,7 @@ impl Homography2D {
     /// Transforms a 2D point using projective homogenous coordinates.
     pub fn transform_point(&self, pt: Point2d) -> Point2d {
         let w = self.m[6] * pt.x + self.m[7] * pt.y + self.m[8];
-        let inv_w = if w.abs() > f64::EPSILON {
-            1.0 / w
-        } else {
-            1.0
-        };
+        let inv_w = if w.abs() > f64::EPSILON { 1.0 / w } else { 1.0 };
 
         let x = (self.m[0] * pt.x + self.m[1] * pt.y + self.m[2]) * inv_w;
         let y = (self.m[3] * pt.x + self.m[4] * pt.y + self.m[5]) * inv_w;
@@ -48,8 +40,7 @@ impl Homography2D {
     /// Computes the 3x3 matrix determinant.
     pub fn determinant(&self) -> f64 {
         let m = &self.m;
-        m[0] * (m[4] * m[8] - m[5] * m[7])
-            - m[1] * (m[3] * m[8] - m[5] * m[6])
+        m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6])
             + m[2] * (m[3] * m[7] - m[4] * m[6])
     }
 
@@ -92,10 +83,7 @@ impl Homography2D {
     }
 
     /// Computes the 3x3 perspective homography mapping 4 source points to 4 destination points.
-    pub fn from_four_point_correspondences(
-        src: [Point2d; 4],
-        dst: [Point2d; 4],
-    ) -> Option<Self> {
+    pub fn from_four_point_correspondences(src: [Point2d; 4], dst: [Point2d; 4]) -> Option<Self> {
         // Direct Linear Transformation (DLT) with 8 equations for 8 parameters (h22 = 1)
         let mut a = [[0.0; 8]; 8];
         let mut b = [0.0; 8];
@@ -131,11 +119,7 @@ impl Homography2D {
         }
 
         Some(Self {
-            m: [
-                h[0], h[1], h[2],
-                h[3], h[4], h[5],
-                h[6], h[7], 1.0,
-            ],
+            m: [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], 1.0],
         })
     }
 }
@@ -232,19 +216,14 @@ impl AffineTransform2D {
     pub fn to_homography(&self) -> Homography2D {
         Homography2D {
             m: [
-                self.a, self.b, self.tx,
-                self.c, self.d, self.ty,
-                0.0,    0.0,    1.0,
+                self.a, self.b, self.tx, self.c, self.d, self.ty, 0.0, 0.0, 1.0,
             ],
         }
     }
 }
 
-fn solve_linear_system_8x8(
-    a: &mut [[f64; 8]; 8],
-    b: &mut [f64; 8],
-    x: &mut [f64; 8],
-) -> bool {
+#[allow(clippy::needless_range_loop)]
+fn solve_linear_system_8x8(a: &mut [[f64; 8]; 8], b: &mut [f64; 8], x: &mut [f64; 8]) -> bool {
     const N: usize = 8;
     for i in 0..N {
         // Pivot selection

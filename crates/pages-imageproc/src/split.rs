@@ -135,6 +135,6 @@ mod tests {
         assert_eq!(split.mode, PageLayoutMode::TwoPages);
         let sx = split.split_x.unwrap();
         // The split should land cleanly in the middle whitespace gutter (80..120)
-        assert!(sx >= 80 && sx <= 120);
+        assert!((80..=120).contains(&sx));
     }
 }
