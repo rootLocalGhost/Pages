@@ -18,6 +18,7 @@ enum CliOutputMode {
     Bw,
     Grayscale,
     Color,
+    Magic,
 }
 
 #[derive(Parser, Debug)]
@@ -43,9 +44,17 @@ struct Args {
     #[arg(long, value_enum, default_value_t = CliLayout::Auto)]
     layout: CliLayout,
 
-    /// Output color format (black-and-white, grayscale, or color)
+    /// Output color format (black-and-white, grayscale, color, or magic color)
     #[arg(long, value_enum, default_value_t = CliOutputMode::Bw)]
     mode: CliOutputMode,
+
+    /// Apply 2D Gaussian background illumination normalization (phone camera de-shadowing)
+    #[arg(long)]
+    deshadow: bool,
+
+    /// Purge isolated toner dust and noise specks
+    #[arg(long)]
+    despeckle: bool,
 
     /// Fixed orientation rotation in degrees (0, 90, 180, 270)
     #[arg(long)]
@@ -231,6 +240,7 @@ fn run_cli() -> anyhow::Result<()> {
             CliOutputMode::Bw => OutputMode::BlackAndWhite,
             CliOutputMode::Grayscale => OutputMode::Grayscale,
             CliOutputMode::Color => OutputMode::Color,
+            CliOutputMode::Magic => OutputMode::MagicColor,
         };
 
         let orientation = match args.orientation {
@@ -255,6 +265,8 @@ fn run_cli() -> anyhow::Result<()> {
             page.orientation = orientation;
             page.margins = margins;
             page.deskew_angle = args.deskew;
+            page.deshadow = args.deshadow;
+            page.despeckle = args.despeckle;
             proj.pages.push(page);
         }
 
