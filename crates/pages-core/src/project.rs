@@ -55,6 +55,7 @@ pub enum OutputMode {
     BlackAndWhite,
     Grayscale,
     Color,
+    MagicColor,
 }
 
 /// Settings and post-processing metadata for a single page.
@@ -68,6 +69,8 @@ pub struct PageSettings {
     pub content_box: Option<Rect2i>,
     pub margins: MarginsMm,
     pub output_mode: OutputMode,
+    pub deshadow: bool,
+    pub despeckle: bool,
     pub dpi: u32,
 }
 
@@ -82,6 +85,8 @@ impl PageSettings {
             content_box: None,
             margins: MarginsMm::default(),
             output_mode: OutputMode::default(),
+            deshadow: false,
+            despeckle: false,
             dpi: 300,
         }
     }
