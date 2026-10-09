@@ -24,7 +24,7 @@ enum CliOutputMode {
 #[derive(Parser, Debug)]
 #[command(
     name = "pages-cli",
-    version = "1.0.0",
+    version,
     about = "Pages CLI - High-performance document & book post-processing engine (ScanSmith AI Integration Ready)"
 )]
 struct Args {
