@@ -1,6 +1,6 @@
 [package]
 name = "pages-gui"
-version = "1.0.0"
+version.workspace = true
 description = "Pages — Document Studio"
 edition = "2021"
 authors = ["Pages Team"]
