@@ -60,7 +60,9 @@ impl BatchProcessor {
                     let out_filename = format!("page_{:04}.png", p.page_number);
                     let out_path = project.output_directory.join(out_filename);
 
-                    if let Some(bin) = &p.binary_image {
+                    if let Some(rgb) = &p.rgb_image {
+                        rgb.save(&out_path)?;
+                    } else if let Some(bin) = &p.binary_image {
                         let gray = bin.to_gray_image();
                         gray.save(&out_path)?;
                     } else if let Some(gray) = &p.gray_image {
