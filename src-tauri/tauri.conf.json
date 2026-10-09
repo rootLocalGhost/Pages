@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Pages",
   "mainBinaryName": "pages",
-  "version": "1.0.0",
+  "version": "0.6.0",
   "identifier": "app.pages.studio",
   "build": {
     "beforeDevCommand": "bun run dev",
