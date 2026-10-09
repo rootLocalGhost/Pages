@@ -1,6 +1,6 @@
 {
   "name": "pages",
-  "version": "0.2.0",
+  "version": "0.6.0",
   "description": "Interactive Book & Document Post-Processing Studio (Pure Rust + SolidJS + Tauri v2)",
   "license": "MIT",
   "type": "module",
