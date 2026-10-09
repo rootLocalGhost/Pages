@@ -2581,7 +2581,7 @@ dependencies = [
 
 [[package]]
 name = "pages-cli"
-version = "1.0.0"
+version = "6.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2594,7 +2594,7 @@ dependencies = [
 
 [[package]]
 name = "pages-core"
-version = "1.0.0"
+version = "6.0.0"
 dependencies = [
  "anyhow",
  "image",
@@ -2609,7 +2609,7 @@ dependencies = [
 
 [[package]]
 name = "pages-dewarp"
-version = "1.0.0"
+version = "6.0.0"
 dependencies = [
  "image",
  "pages-imageproc",
@@ -2621,7 +2621,7 @@ dependencies = [
 
 [[package]]
 name = "pages-gui"
-version = "1.0.0"
+version = "6.0.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2644,7 +2644,7 @@ dependencies = [
 
 [[package]]
 name = "pages-imageproc"
-version = "1.0.0"
+version = "6.0.0"
 dependencies = [
  "approx",
  "image",
@@ -2656,7 +2656,7 @@ dependencies = [
 
 [[package]]
 name = "pages-math"
-version = "1.0.0"
+version = "6.0.0"
 dependencies = [
  "approx",
  "serde",
