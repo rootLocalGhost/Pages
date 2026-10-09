@@ -612,7 +612,7 @@ export default function App() {
           </div>
 
           <div class="neo-pill-badge purple">
-            <span>GPL-3.0 Open Source</span>
+            <span>MIT License</span>
           </div>
         </div>
 

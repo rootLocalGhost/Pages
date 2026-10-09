@@ -475,15 +475,16 @@ input, button, select, textarea {
    ========================================================================== */
 .neo-workspace-grid {
   display: grid;
-  grid-template-columns: 310px 1fr 390px;
+  grid-template-columns: 310px 1fr 420px;
   flex: 1;
   min-height: 0;
+  height: calc(100vh - 60px);
   overflow: hidden;
   background: var(--bg-app);
 }
 
 .neo-workspace-grid.filmstrip-collapsed {
-  grid-template-columns: 56px 1fr 390px;
+  grid-template-columns: 56px 1fr 420px;
 }
 
 /* ==========================================================================
@@ -1001,8 +1002,12 @@ input, button, select, textarea {
   background: var(--bg-surface);
   border-left: var(--border-width) solid var(--border-color);
   overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+  min-height: 0;
   padding: 16px;
   gap: 16px;
+  box-sizing: border-box;
 }
 
 .inspector-stage-banner {
@@ -1014,6 +1019,7 @@ input, button, select, textarea {
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-hard-sm);
+  flex-shrink: 0;
 }
 
 .stage-banner-icon {
@@ -1029,6 +1035,7 @@ input, button, select, textarea {
   font-size: 18px;
   font-weight: 800;
   color: #18181b;
+  flex-shrink: 0;
 }
 
 .stage-banner-title {
@@ -1047,11 +1054,12 @@ input, button, select, textarea {
 .neo-stage-card {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+  min-height: fit-content;
   background: var(--bg-card);
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-hard-sm);
-  overflow: hidden;
   transition: all 120ms var(--anim-snappy);
 }
 
@@ -1068,11 +1076,14 @@ input, button, select, textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 11px 14px;
   background: var(--bg-surface-elevated);
   user-select: none;
   cursor: pointer;
   border-bottom: var(--border-width) solid var(--border-color);
+  border-top-left-radius: calc(var(--radius-md) - var(--border-width));
+  border-top-right-radius: calc(var(--radius-md) - var(--border-width));
+  flex-shrink: 0;
 }
 
 .neo-stage-card.active .stage-card-header {
@@ -1097,6 +1108,7 @@ input, button, select, textarea {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 800;
+  flex-shrink: 0;
 }
 
 .neo-stage-card.active .stage-card-badge {
@@ -1130,12 +1142,17 @@ input, button, select, textarea {
   padding: 14px;
   gap: 12px;
   background: var(--bg-card);
+  flex-shrink: 0;
+  min-height: fit-content;
+  border-bottom-left-radius: calc(var(--radius-md) - var(--border-width));
+  border-bottom-right-radius: calc(var(--radius-md) - var(--border-width));
 }
 
 .batch-btn-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .stage-action-btn-row {
@@ -1143,6 +1160,7 @@ input, button, select, textarea {
   flex-direction: column;
   gap: 6px;
   margin-top: 4px;
+  flex-shrink: 0;
 }
 
 .inspector-master-actions {
@@ -1154,6 +1172,7 @@ input, button, select, textarea {
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-hard-sm);
+  flex-shrink: 0;
 }
 
 /* Neo Control Card */
@@ -1192,6 +1211,7 @@ input, button, select, textarea {
   box-shadow: var(--shadow-hard-sm);
   padding: 3px;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .neo-segment-btn {
@@ -1228,6 +1248,7 @@ input, button, select, textarea {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .slider-info-row {
@@ -1287,6 +1308,7 @@ input, button, select, textarea {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .input-field-block {
@@ -1343,6 +1365,7 @@ input, button, select, textarea {
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 120ms ease;
+  flex-shrink: 0;
 }
 
 .neo-toggle-box:hover {
