@@ -76,6 +76,68 @@ export default function App() {
   });
   const [showBatchModal, setShowBatchModal] = createSignal(false);
 
+  // Freemium Licensing & Daily Quota State (LemonSqueezy preview & Developer code)
+  const getTodayDateKey = () => new Date().toISOString().slice(0, 10);
+
+  const getPagesUsage = (): number => {
+    try {
+      const raw = localStorage.getItem("pages_daily_quota");
+      if (!raw) return 0;
+      const data = JSON.parse(raw);
+      if (data.date !== getTodayDateKey()) return 0;
+      return typeof data.count === "number" ? data.count : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const [isProUnlocked, setIsProUnlocked] = createSignal(
+    localStorage.getItem("pages_pro_unlocked") === "true"
+  );
+  const [dailyUsageCount, setDailyUsageCount] = createSignal(getPagesUsage());
+  const [showLicenseModal, setShowLicenseModal] = createSignal(false);
+  const [licenseModalReason, setLicenseModalReason] = createSignal<{
+    type: "import" | "quota" | "manual";
+    title: string;
+    message: string;
+    pendingPaths?: string[];
+  }>({
+    type: "manual",
+    title: "Pages Pro & Quotas",
+    message: "Manage license status and daily quotas.",
+  });
+  const [secretDevKey, setSecretDevKey] = createSignal("");
+  const [devKeyError, setDevKeyError] = createSignal("");
+
+  const incrementPagesUsage = (amount: number) => {
+    const today = getTodayDateKey();
+    const curr = getPagesUsage();
+    const updated = curr + amount;
+    localStorage.setItem("pages_daily_quota", JSON.stringify({ date: today, count: updated }));
+    setDailyUsageCount(updated);
+  };
+
+  const unlockDeveloperPro = (key: string): boolean => {
+    const validKeys = [
+      "PAGES-DEV-2026",
+      "DEV-GHOST-2026",
+      "DEV-UNLIMITED",
+      "DOCX-DEV-2026",
+      "LEMON-DEV-ACCESS",
+      "GHOST-DEV-KEY",
+    ];
+    if (validKeys.includes(key.trim().toUpperCase())) {
+      localStorage.setItem("pages_pro_unlocked", "true");
+      setIsProUnlocked(true);
+      setDevKeyError("");
+      addToast("Developer Pro License Activated! Unlimited access granted.", "success");
+      return true;
+    } else {
+      setDevKeyError("Invalid developer secret code. Contact team or enter valid key.");
+      return false;
+    }
+  };
+
   // Toast System
   const [toasts, setToasts] = createSignal<ToastMessage[]>([]);
 
@@ -188,9 +250,38 @@ export default function App() {
       const filePaths = Array.isArray(selected) ? selected : [selected];
       if (filePaths.length === 0) return;
 
+      if (!isProUnlocked() && filePaths.length > 5) {
+        setLicenseModalReason({
+          type: "import",
+          title: "Import Limit (Free Tier: Max 5 Images)",
+          message: `Free tier allows importing up to 5 images at once. You selected ${filePaths.length} scan files. Upgrade to Pages Pro or enter a Developer Secret Code for unlimited batch imports.`,
+          pendingPaths: filePaths,
+        });
+        setShowLicenseModal(true);
+        return;
+      }
+
       addToast(`Importing ${filePaths.length} scan files...`, "info");
       const imported = await invoke<PageItem[]>("import_images", { paths: filePaths });
 
+      setPages((prev) => [...prev, ...imported]);
+      if (!selectedPageId() && imported.length > 0) {
+        selectPage(imported[0].id);
+      }
+      addToast(`Loaded ${imported.length} scan pages successfully!`, "success");
+    } catch (err: any) {
+      addToast(`Import failed: ${err}`, "error");
+    }
+  };
+
+  const importFirstFivePending = async () => {
+    const paths = licenseModalReason().pendingPaths || [];
+    const firstFive = paths.slice(0, 5);
+    setShowLicenseModal(false);
+    if (firstFive.length === 0) return;
+    try {
+      addToast(`Importing first ${firstFive.length} scan files (Free Tier)...`, "info");
+      const imported = await invoke<PageItem[]>("import_images", { paths: firstFive });
       setPages((prev) => [...prev, ...imported]);
       if (!selectedPageId() && imported.length > 0) {
         selectPage(imported[0].id);
@@ -446,6 +537,30 @@ export default function App() {
       return;
     }
 
+    if (!isProUnlocked()) {
+      const used = getPagesUsage();
+      const needed = pages().length;
+      if (used >= 15) {
+        setLicenseModalReason({
+          type: "quota",
+          title: "Daily Free Limit Reached (15/15 Pages)",
+          message: `You have processed ${used}/15 pages today. Free tier allows up to 15 page processings per day. LemonSqueezy payment integration coming soon!`,
+        });
+        setShowLicenseModal(true);
+        return;
+      }
+      if (used + needed > 15) {
+        const remaining = 15 - used;
+        setLicenseModalReason({
+          type: "quota",
+          title: "Batch Exceeds Daily Free Quota",
+          message: `You have ${remaining} free page processing(s) remaining today, but current project has ${needed} pages. Upgrade or use developer code to render all.`,
+        });
+        setShowLicenseModal(true);
+        return;
+      }
+    }
+
     try {
       const outputDir = await open({
         directory: true,
@@ -469,6 +584,7 @@ export default function App() {
         outputDir: outputDir as string,
       });
 
+      incrementPagesUsage(results.length);
       addToast(`Batch complete! Processed ${results.length} scan pages successfully.`, "success");
     } catch (err: any) {
       addToast(`Batch processing error: ${err}`, "error");
@@ -611,9 +727,41 @@ export default function App() {
             <span class="font-mono">{pages().length}</span>
           </div>
 
-          <div class="neo-pill-badge purple">
-            <span>MIT License</span>
-          </div>
+          <Show
+            when={isProUnlocked()}
+            fallback={
+              <div
+                class="neo-pill-badge orange cursor-pointer"
+                onClick={() => {
+                  setLicenseModalReason({
+                    type: "manual",
+                    title: "Pages Free Quota",
+                    message: `Free Tier Active: ${dailyUsageCount()}/15 daily pages processed. Max 5 images per import.`,
+                  });
+                  setShowLicenseModal(true);
+                }}
+                title="Click to view license status / upgrade"
+              >
+                <span>Free: {dailyUsageCount()}/15 Today</span>
+              </div>
+            }
+          >
+            <div
+              class="neo-pill-badge lime cursor-pointer"
+              onClick={() => {
+                setLicenseModalReason({
+                  type: "manual",
+                  title: "Pages Pro Active",
+                  message: "Developer Pro License Active. Unlimited imports and multithreaded exports enabled.",
+                });
+                setShowLicenseModal(true);
+              }}
+              title="Pro Developer License Active"
+            >
+              <span class="status-dot green"></span>
+              <span>Pro Unlocked</span>
+            </div>
+          </Show>
         </div>
 
         <div class="header-actions-row">
@@ -1567,6 +1715,139 @@ export default function App() {
                 ✓ Done (Close Window)
               </button>
             </Show>
+          </div>
+        </div>
+      </Show>
+
+      {/* License & LemonSqueezy Paywall Modal */}
+      <Show when={showLicenseModal()}>
+        <div class="neo-modal-backdrop" onClick={() => setShowLicenseModal(false)}>
+          <div class="neo-modal-box neo-paywall-modal" onClick={(e) => e.stopPropagation()}>
+            <div class="neo-card-header">
+              <span class="font-heading" style={{ "font-size": "16px", "font-weight": "800" }}>
+                {licenseModalReason().title}
+              </span>
+              <span class={`sticker-badge ${isProUnlocked() ? "lime" : "coral"}`}>
+                {isProUnlocked() ? "PRO UNLOCKED" : "FREE TIER"}
+              </span>
+            </div>
+
+            <p style={{ "font-size": "13px", "color": "var(--ink)", "line-height": "1.5" }}>
+              {licenseModalReason().message}
+            </p>
+
+            <div class="neo-lemon-card">
+              <span class="neo-lemon-icon">🍋</span>
+              <div class="neo-lemon-text">
+                <span class="neo-lemon-title">LemonSqueezy Checkout Integration Coming</span>
+                <span class="neo-lemon-subtitle">
+                  Paid subscription / lifetime licenses via LemonSqueezy are rolling out soon. Free tier: 5 images per import & 15 daily page processings.
+                </span>
+              </div>
+            </div>
+
+            <div class="neo-quota-pills-row">
+              <div class="neo-pill-badge blue">
+                <span>Daily Quota:</span>
+                <span class="font-mono">{dailyUsageCount()} / 15 Pages</span>
+              </div>
+              <div class="neo-pill-badge purple">
+                <span>Import Limit:</span>
+                <span class="font-mono">5 Images / batch</span>
+              </div>
+            </div>
+
+            {/* If import modal, offer partial import */}
+            <Show when={licenseModalReason().type === "import" && (licenseModalReason().pendingPaths?.length || 0) > 0}>
+              <div style={{ "display": "flex", "gap": "10px", "margin-top": "4px" }}>
+                <button class="neo-btn blue" onClick={importFirstFivePending}>
+                  📥 Import First 5 Images Only
+                </button>
+              </div>
+            </Show>
+
+            {/* Secret Developer Code Section */}
+            <div class="neo-dev-unlock-section">
+              <div style={{ "display": "flex", "justify-content": "space-between", "align-items": "center" }}>
+                <span style={{ "font-family": "var(--font-heading)", "font-size": "12px", "font-weight": "800" }}>
+                  🔑 Developer / Tester Override Code:
+                </span>
+                <Show when={isProUnlocked()}>
+                  <span style={{ "font-size": "11px", "color": "var(--neo-lime)", "font-weight": "700" }}>
+                    ✓ Pro Unlocked
+                  </span>
+                </Show>
+              </div>
+
+              <div class="neo-dev-input-row">
+                <input
+                  type="text"
+                  class="neo-input"
+                  placeholder="Enter secret developer code..."
+                  value={secretDevKey()}
+                  onInput={(e) => setSecretDevKey(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (unlockDeveloperPro(secretDevKey())) {
+                        if (licenseModalReason().type === "import" && licenseModalReason().pendingPaths) {
+                          const p = licenseModalReason().pendingPaths!;
+                          setShowLicenseModal(false);
+                          invoke<PageItem[]>("import_images", { paths: p }).then((imported) => {
+                            setPages((prev) => [...prev, ...imported]);
+                            if (!selectedPageId() && imported.length > 0) selectPage(imported[0].id);
+                            addToast(`Loaded ${imported.length} scan pages successfully!`, "success");
+                          });
+                        }
+                      }
+                    }
+                  }}
+                />
+                <button
+                  class="neo-btn lime sm"
+                  onClick={() => {
+                    if (unlockDeveloperPro(secretDevKey())) {
+                      if (licenseModalReason().type === "import" && licenseModalReason().pendingPaths) {
+                        const p = licenseModalReason().pendingPaths!;
+                        setShowLicenseModal(false);
+                        invoke<PageItem[]>("import_images", { paths: p }).then((imported) => {
+                          setPages((prev) => [...prev, ...imported]);
+                          if (!selectedPageId() && imported.length > 0) selectPage(imported[0].id);
+                          addToast(`Loaded ${imported.length} scan pages successfully!`, "success");
+                        });
+                      }
+                    }
+                  }}
+                >
+                  Unlock
+                </button>
+              </div>
+
+              <Show when={devKeyError()}>
+                <span style={{ "color": "var(--neo-coral)", "font-size": "11px", "font-weight": "700" }}>
+                  {devKeyError()}
+                </span>
+              </Show>
+
+              <Show when={isProUnlocked()}>
+                <button
+                  class="neo-btn coral sm"
+                  style={{ "align-self": "flex-start", "margin-top": "4px" }}
+                  onClick={() => {
+                    localStorage.removeItem("pages_pro_unlocked");
+                    setIsProUnlocked(false);
+                    addToast("Pro mode disabled (Testing Free Tier limits)", "info");
+                  }}
+                >
+                  🔒 Lock Again (Test Free Tier)
+                </button>
+              </Show>
+            </div>
+
+            <div style={{ "display": "flex", "justify-content": "flex-end", "gap": "10px", "margin-top": "6px" }}>
+              <button class="neo-btn sm" onClick={() => setShowLicenseModal(false)}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       </Show>
