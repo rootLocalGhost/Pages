@@ -28,3 +28,5 @@ dist/
 project.json
 *.project.json
 /ScanSmith-AI/
+/ai-training/checkpoints/
+/ai-training/dataset/raw/
