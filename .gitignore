@@ -32,3 +32,6 @@ project.json
 /ai-training/dataset/raw/
 __pycache__/
 *.py[cod]
+/test_images/
+/test_results/
+test_inference.py
