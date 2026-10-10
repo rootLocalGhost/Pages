@@ -1510,3 +1510,69 @@ input, button, select, textarea {
 .neo-toast-item.success { background: var(--neo-lime-light); border-color: var(--border-color); }
 .neo-toast-item.error   { background: var(--neo-coral-light); border-color: var(--border-color); }
 .neo-toast-item.info    { background: var(--neo-blue-light); border-color: var(--border-color); }
+
+/* ==========================================================================
+   License & LemonSqueezy Paywall Modal
+   ========================================================================== */
+.neo-paywall-modal {
+  max-width: 520px;
+}
+
+.neo-lemon-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--neo-yellow-light, #fef3c7);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hard-sm);
+}
+
+.neo-lemon-icon {
+  font-size: 28px;
+}
+
+.neo-lemon-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.neo-lemon-title {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.neo-lemon-subtitle {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.neo-quota-pills-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.neo-dev-unlock-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg-surface-elevated);
+  border: var(--border-width) dashed var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.neo-dev-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
