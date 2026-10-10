@@ -5,8 +5,8 @@ fn test_pages_ai_engine_load_and_infer() {
     use image::{Rgb, RgbImage};
     use std::path::Path;
 
-    // Path relative to crates/pages-core during cargo test
-    let model_path = Path::new("../../ai-training/onnx_models/pages_clean_v1.onnx");
+    // Path to model in standalone Pages-AI project
+    let model_path = Path::new("c:/Users/LEADER/Desktop/Pages-AI/onnx_models/pages_clean_v1.onnx");
     if !model_path.exists() {
         eprintln!("Model not found at {:?}, skipping test", model_path);
         return;
