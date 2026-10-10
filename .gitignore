@@ -30,3 +30,5 @@ project.json
 /ScanSmith-AI/
 /ai-training/checkpoints/
 /ai-training/dataset/raw/
+__pycache__/
+*.py[cod]
