@@ -55,12 +55,14 @@ pub struct PageItem {
     pub auto_deskew_angle: Option<f64>,
     pub content_box: Option<ContentBoxDto>,
     pub margins: MarginsDto,
-    pub output_mode: String,         // "bw", "grayscale", "color"
+    pub output_mode: String,         // "bw", "grayscale", "color", "magic", "magic_ai"
     pub binarization_method: String, // "sauvola", "wolf", "otsu"
     pub sauvola_k: f64,
     pub sauvola_window: u32,
     pub despeckle: bool,
     pub dewarp: bool,
+    pub ai_dewarp_active: bool,
+    pub ai_corners: Option<[[f64; 2]; 4]>,
     pub dpi: u32,
     pub thumbnail_path: Option<String>,
 }
@@ -82,6 +84,8 @@ pub struct StagePreviewResult {
     pub auto_deskew_angle: Option<f64>,
     pub auto_content_box: Option<ContentBoxDto>,
     pub split_info: Option<SplitResultDto>,
+    pub ai_corners: Option<[[f64; 2]; 4]>,
+    pub ai_device: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +101,21 @@ pub struct SystemInfo {
     pub cpu_cores: usize,
     pub app_version: String,
     pub temp_dir: String,
+    pub ai_ready: bool,
+    pub ai_hardware: String,
+}
+
+static AI_ENGINE: std::sync::Mutex<Option<pages_core::PagesAiEngine>> = std::sync::Mutex::new(None);
+
+fn get_or_init_ai(preferred: Option<pages_core::AiDeviceChoice>) -> Result<(), String> {
+    let mut lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
+    if lock.is_none() {
+        let dev = preferred.unwrap_or(pages_core::AiDeviceChoice::Auto);
+        if let Ok(engine) = pages_core::PagesAiEngine::auto_load(dev) {
+            *lock = Some(engine);
+        }
+    }
+    Ok(())
 }
 
 fn get_preview_cache_dir() -> PathBuf {
@@ -126,11 +145,37 @@ fn apply_orientation(img: DynamicImage, orientation: u32) -> DynamicImage {
 
 #[tauri::command]
 fn get_system_info() -> Result<SystemInfo, String> {
+    let _ = get_or_init_ai(None);
+    let lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
+    let (ai_ready, ai_hardware) = if let Some(engine) = lock.as_ref() {
+        let (dev_name, _) = engine.device_info();
+        (engine.is_ready(), dev_name.to_string())
+    } else {
+        (false, "AI Engine Loading / Unavailable".to_string())
+    };
+
     Ok(SystemInfo {
         cpu_cores: num_cpus::get(),
-        app_version: "0.2.0".to_string(),
+        app_version: "6.0.0".to_string(),
         temp_dir: get_preview_cache_dir().to_string_lossy().to_string(),
+        ai_ready,
+        ai_hardware,
     })
+}
+
+#[tauri::command]
+async fn set_ai_device(device: String) -> Result<SystemInfo, String> {
+    let pref: pages_core::AiDeviceChoice = device.parse().unwrap_or(pages_core::AiDeviceChoice::Auto);
+    tokio::task::spawn_blocking(move || {
+        let mut lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
+        let engine = pages_core::PagesAiEngine::auto_load(pref).map_err(|e| e.to_string())?;
+        *lock = Some(engine);
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    get_system_info()
 }
 
 #[tauri::command]
@@ -193,6 +238,8 @@ fn import_images(paths: Vec<String>) -> Result<Vec<PageItem>, String> {
                 sauvola_window: 15,
                 despeckle: true,
                 dewarp: false,
+                ai_dewarp_active: false,
+                ai_corners: None,
                 dpi: 300,
                 thumbnail_path: Some(thumb_path.to_string_lossy().to_string()),
             })
@@ -570,6 +617,8 @@ async fn generate_stage_preview(
                 auto_deskew_angle: None,
                 auto_content_box: None,
                 split_info: None,
+                ai_corners: None,
+                ai_device: None,
             });
         }
 
@@ -615,6 +664,49 @@ async fn generate_stage_preview(
                 preview_img.save(&preview_path).map_err(|e| e.to_string())?;
             }
             "deskew" => {
+                if page.ai_dewarp_active {
+                    let _ = get_or_init_ai(None);
+                    if let Ok(lock) = AI_ENGINE.lock() {
+                        if let Some(engine) = lock.as_ref() {
+                            let (orig_dyn, _, _, _) = load_working_image(&cache_dir, &page.file_path)?;
+                            let rgb_raw = apply_orientation(orig_dyn, page.orientation).to_rgb8();
+
+                            let custom_c = page.ai_corners.map(|c| [
+                                Point2d::new(c[0][0], c[0][1]),
+                                Point2d::new(c[1][0], c[1][1]),
+                                Point2d::new(c[2][0], c[2][1]),
+                                Point2d::new(c[3][0], c[3][1]),
+                            ]);
+
+                            if let Ok((dewarped, geom, detected_deg)) =
+                                engine.dewarp_page(&rgb_raw, custom_c, true, true, true)
+                            {
+                                auto_deskew_angle = Some(detected_deg);
+                                let ai_corners = Some([
+                                    [geom.corners[0].x, geom.corners[0].y],
+                                    [geom.corners[1].x, geom.corners[1].y],
+                                    [geom.corners[2].x, geom.corners[2].y],
+                                    [geom.corners[3].x, geom.corners[3].y],
+                                ]);
+                                let (dev_name, _) = engine.device_info();
+                                let _ = dewarped.save(&preview_path);
+
+                                return Ok(StagePreviewResult {
+                                    preview_path: preview_path.to_string_lossy().to_string(),
+                                    original_path: page.file_path,
+                                    width: dewarped.width(),
+                                    height: dewarped.height(),
+                                    auto_deskew_angle,
+                                    auto_content_box: None,
+                                    split_info: None,
+                                    ai_corners,
+                                    ai_device: Some(dev_name.to_string()),
+                                });
+                            }
+                        }
+                    }
+                }
+
                 let gray = preview_img.to_luma8();
                 let bin = binarize_sauvola(&gray, 15, 0.25, 0);
                 let finder = SkewFinder::new();
@@ -664,6 +756,30 @@ async fn generate_stage_preview(
                 out_gray.save(&preview_path).map_err(|e| e.to_string())?;
             }
             "output" => {
+                if page.output_mode == "magic_ai" || page.output_mode == "magic" {
+                    let _ = get_or_init_ai(None);
+                    if let Ok(lock) = AI_ENGINE.lock() {
+                        if let Some(engine) = lock.as_ref() {
+                            let rgb = preview_img.to_rgb8();
+                            if let Ok(cleaned) = engine.clean_page_tiled(&rgb, 512, 64) {
+                                cleaned.save(&preview_path).map_err(|e| e.to_string())?;
+                                let (dev_name, _) = engine.device_info();
+                                return Ok(StagePreviewResult {
+                                    preview_path: preview_path.to_string_lossy().to_string(),
+                                    original_path: page.file_path,
+                                    width: cleaned.width(),
+                                    height: cleaned.height(),
+                                    auto_deskew_angle: None,
+                                    auto_content_box: None,
+                                    split_info: None,
+                                    ai_corners: None,
+                                    ai_device: Some(dev_name.to_string()),
+                                });
+                            }
+                        }
+                    }
+                }
+
                 let mut gray = preview_img.to_luma8();
 
                 if page.dewarp {
@@ -731,6 +847,8 @@ async fn generate_stage_preview(
             auto_deskew_angle,
             auto_content_box,
             split_info,
+            ai_corners: None,
+            ai_device: None,
         })
     })
     .await
@@ -750,34 +868,67 @@ async fn run_batch_processing(
     let completed = Arc::new(AtomicUsize::new(0));
 
     let processed_files: Result<Vec<String>, String> = tokio::task::spawn_blocking(move || {
+        let _ = get_or_init_ai(None);
+
         let results: Result<Vec<String>, String> = pages
             .par_iter()
             .enumerate()
             .map(|(idx, page)| {
                 let img = image::open(&page.file_path).map_err(|e| e.to_string())?;
                 let oriented = apply_orientation(img, page.orientation);
-                let gray = oriented.to_luma8();
-
-                let bin = match page.binarization_method.as_str() {
-                    "otsu" => binarize_otsu(&gray, 0),
-                    _ => binarize_sauvola(&gray, page.sauvola_window, page.sauvola_k, 0),
-                };
-
-                let deskewed = if page.deskew_angle.abs() > 0.001 {
-                    rotate_binary_image(&bin, page.deskew_angle)
-                } else {
-                    bin
-                };
-
-                let final_bin = if page.despeckle {
-                    ConnectedComponentLabeler::label_8_connected(&deskewed).despeckle(3)
-                } else {
-                    deskewed
-                };
 
                 let out_file = out_path.join(format!("page_{:04}.png", idx + 1));
-                let out_gray = final_bin.to_gray_image();
-                out_gray.save(&out_file).map_err(|e| e.to_string())?;
+
+                // Check if full AI restore is requested
+                if page.output_mode == "magic_ai" || page.output_mode == "magic" || page.ai_dewarp_active {
+                    let mut processed_rgb = oriented.to_rgb8();
+
+                    if let Ok(lock) = AI_ENGINE.lock() {
+                        if let Some(engine) = lock.as_ref() {
+                            if page.ai_dewarp_active {
+                                let custom_c = page.ai_corners.map(|c| [
+                                    Point2d::new(c[0][0], c[0][1]),
+                                    Point2d::new(c[1][0], c[1][1]),
+                                    Point2d::new(c[2][0], c[2][1]),
+                                    Point2d::new(c[3][0], c[3][1]),
+                                ]);
+                                if let Ok((dewarped, _, _)) = engine.dewarp_page(&processed_rgb, custom_c, true, true, true) {
+                                    processed_rgb = dewarped;
+                                }
+                            }
+
+                            if page.output_mode == "magic_ai" || page.output_mode == "magic" {
+                                if let Ok(cleaned) = engine.clean_page_tiled(&processed_rgb, 512, 64) {
+                                    processed_rgb = cleaned;
+                                }
+                            }
+                        }
+                    }
+
+                    processed_rgb.save(&out_file).map_err(|e| e.to_string())?;
+                } else {
+                    let gray = oriented.to_luma8();
+
+                    let bin = match page.binarization_method.as_str() {
+                        "otsu" => binarize_otsu(&gray, 0),
+                        _ => binarize_sauvola(&gray, page.sauvola_window, page.sauvola_k, 0),
+                    };
+
+                    let deskewed = if page.deskew_angle.abs() > 0.001 {
+                        rotate_binary_image(&bin, page.deskew_angle)
+                    } else {
+                        bin
+                    };
+
+                    let final_bin = if page.despeckle {
+                        ConnectedComponentLabeler::label_8_connected(&deskewed).despeckle(3)
+                    } else {
+                        deskewed
+                    };
+
+                    let out_gray = final_bin.to_gray_image();
+                    out_gray.save(&out_file).map_err(|e| e.to_string())?;
+                }
 
                 let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
                 let pct = (done as f32 / total as f32) * 100.0;
@@ -803,12 +954,144 @@ async fn run_batch_processing(
     processed_files
 }
 
+#[tauri::command]
+async fn ai_detect_corners(image_path: String) -> Result<[[f64; 2]; 4], String> {
+    tokio::task::spawn_blocking(move || {
+        let _ = get_or_init_ai(None);
+        let lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
+        let engine = lock.as_ref().ok_or_else(|| "AI Engine not loaded".to_string())?;
+
+        let img = image::open(&image_path).map_err(|e| e.to_string())?.to_rgb8();
+        let geom = engine.detect_geometry(&img).map_err(|e| e.to_string())?;
+        let c = geom.corners;
+        Ok([
+            [c[0].x, c[0].y],
+            [c[1].x, c[1].y],
+            [c[2].x, c[2].y],
+            [c[3].x, c[3].y],
+        ])
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn ai_dewarp_page(
+    image_path: String,
+    corners: Option<[[f64; 2]; 4]>,
+    orientation: Option<u32>,
+) -> Result<StagePreviewResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let cache_dir = get_preview_cache_dir();
+        let _ = get_or_init_ai(None);
+        let lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
+        let engine = lock.as_ref().ok_or_else(|| "AI Engine not loaded".to_string())?;
+
+        let img_raw = image::open(&image_path).map_err(|e| e.to_string())?;
+        let oriented = apply_orientation(img_raw, orientation.unwrap_or(0)).to_rgb8();
+
+        let custom_c = corners.map(|c| [
+            Point2d::new(c[0][0], c[0][1]),
+            Point2d::new(c[1][0], c[1][1]),
+            Point2d::new(c[2][0], c[2][1]),
+            Point2d::new(c[3][0], c[3][1]),
+        ]);
+
+        let (dewarped, geom, skew_deg) = engine
+            .dewarp_page(&oriented, custom_c, true, true, true)
+            .map_err(|e| e.to_string())?;
+
+        let hash_key = format!("ai_dewarp_{}_{:?}", hash_str(&image_path), corners);
+        let out_preview = cache_dir.join(format!("ai_dw_{:x}.jpg", hash_str(&hash_key)));
+        dewarped.save(&out_preview).map_err(|e| e.to_string())?;
+
+        let (dev_name, _) = engine.device_info();
+
+        Ok(StagePreviewResult {
+            preview_path: out_preview.to_string_lossy().to_string(),
+            original_path: image_path,
+            width: dewarped.width(),
+            height: dewarped.height(),
+            auto_deskew_angle: Some(skew_deg),
+            auto_content_box: None,
+            split_info: None,
+            ai_corners: Some([
+                [geom.corners[0].x, geom.corners[0].y],
+                [geom.corners[1].x, geom.corners[1].y],
+                [geom.corners[2].x, geom.corners[2].y],
+                [geom.corners[3].x, geom.corners[3].y],
+            ]),
+            ai_device: Some(dev_name.to_string()),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn ai_restore_page(
+    image_path: String,
+    orientation: Option<u32>,
+    fast: Option<bool>,
+) -> Result<StagePreviewResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let cache_dir = get_preview_cache_dir();
+        let _ = get_or_init_ai(None);
+        let lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
+        let engine = lock.as_ref().ok_or_else(|| "AI Engine not loaded".to_string())?;
+
+        let is_fast = fast.unwrap_or(false);
+        let img_raw = image::open(&image_path).map_err(|e| e.to_string())?;
+        let oriented = apply_orientation(img_raw, orientation.unwrap_or(0)).to_rgb8();
+
+        let opts = pages_core::AiPipelineOptions {
+            dewarp: true,
+            clean: true,
+            refine_edges: true,
+            auto_deskew: true,
+            clean_borders: true,
+            tile_size: if is_fast { 384 } else { 512 },
+            overlap: if is_fast { 32 } else { 64 },
+            fast_mode: is_fast,
+            device: pages_core::AiDeviceChoice::Auto,
+        };
+
+        let (restored, report) = engine.run_pipeline(&oriented, &opts).map_err(|e| e.to_string())?;
+
+        let hash_key = format!("ai_restore_{}_{:?}", hash_str(&image_path), is_fast);
+        let out_preview = cache_dir.join(format!("ai_rst_{:x}.jpg", hash_str(&hash_key)));
+        restored.save(&out_preview).map_err(|e| e.to_string())?;
+
+        let corners_arr = report.corners.map(|c| [
+            [c[0].x, c[0].y],
+            [c[1].x, c[1].y],
+            [c[2].x, c[2].y],
+            [c[3].x, c[3].y],
+        ]);
+
+        Ok(StagePreviewResult {
+            preview_path: out_preview.to_string_lossy().to_string(),
+            original_path: image_path,
+            width: restored.width(),
+            height: restored.height(),
+            auto_deskew_angle: Some(report.detected_skew_deg),
+            auto_content_box: None,
+            split_info: None,
+            ai_corners: corners_arr,
+            ai_device: Some(report.device_used),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_system_info,
+            set_ai_device,
             import_images,
             auto_detect_orientation,
             auto_detect_split,
@@ -819,6 +1102,9 @@ pub fn run() {
             batch_auto_analyze_all,
             generate_stage_preview,
             run_batch_processing,
+            ai_detect_corners,
+            ai_dewarp_page,
+            ai_restore_page,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Pages");
