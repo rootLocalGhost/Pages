@@ -2758,6 +2758,7 @@ dependencies = [
  "image",
  "pages-core",
  "pages-imageproc",
+ "pages-math",
  "serde",
  "serde_json",
 ]
