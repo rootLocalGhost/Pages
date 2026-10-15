@@ -46,6 +46,10 @@
   --neo-orange-hover: #ea580c;
   --neo-orange-light: #ffedd5;
   --neo-yellow: #fde047;
+  --neo-cyan: #00d5e5;
+  --neo-cyan-hover: #00b8c7;
+  --neo-cyan-light: #e0faff;
+  --neo-cyan-glow: rgba(0, 213, 229, 0.4);
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -101,6 +105,10 @@
   --neo-orange-hover: #ea580c;
   --neo-orange-light: #3e2213;
   --neo-yellow: #fde047;
+  --neo-cyan: #00f5ff;
+  --neo-cyan-hover: #38bdf8;
+  --neo-cyan-light: #082f49;
+  --neo-cyan-glow: rgba(0, 245, 255, 0.55);
 }
 
 /* Base Reset & Core Typography */
@@ -345,6 +353,12 @@ input, button, select, textarea {
   color: #18181b;
 }
 .neo-btn.orange:hover { background: var(--neo-orange-hover); }
+
+.neo-btn.cyan {
+  background: var(--neo-cyan);
+  color: #18181b;
+}
+.neo-btn.cyan:hover { background: var(--neo-cyan-hover); }
 
 /* ==========================================================================
    Animated Neo-Brutalist Processing Banner
@@ -1575,4 +1589,244 @@ input, button, select, textarea {
 .cursor-pointer {
   cursor: pointer;
 }
+
+/* ==========================================================================
+   Pages Neural AI Engine & Cyber-Studio Elements
+   ========================================================================== */
+
+/* AI Hardware Telemetry Pill & Dropdown */
+.ai-telemetry-pill {
+  background: var(--bg-surface-elevated);
+  border: var(--border-width) solid var(--neo-cyan);
+  box-shadow: 0 0 10px var(--neo-cyan-glow);
+  padding: 2px 10px;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.status-dot.cyan {
+  background: var(--neo-cyan);
+  box-shadow: 0 0 6px var(--neo-cyan);
+}
+
+.status-dot.pulse {
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 1;
+    box-shadow: 0 0 12px var(--neo-cyan);
+  }
+}
+
+.ai-chip-label {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--neo-cyan);
+}
+
+.ai-hardware-select {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-xs);
+}
+
+.ai-hardware-select option {
+  background: var(--bg-surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+/* 1-Click Magic AI Restore Button */
+.neo-btn.magic-ai-glow {
+  background: linear-gradient(135deg, #00f5ff 0%, #8b5cf6 50%, #d946ef 100%);
+  background-size: 200% 200%;
+  color: #0b0d13;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: var(--shadow-hard-sm), 0 0 16px rgba(0, 245, 255, 0.4);
+  animation: gradientShift 4s ease infinite;
+  transition: all 0.18s var(--anim-snappy);
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.neo-btn.magic-ai-glow:hover {
+  transform: translate(-1.5px, -1.5px);
+  box-shadow: var(--shadow-hard), 0 0 24px rgba(139, 92, 246, 0.6);
+  filter: brightness(1.08);
+}
+
+.neo-btn.magic-ai-glow:active {
+  transform: translate(1px, 1px);
+  box-shadow: var(--shadow-hard-active);
+}
+
+/* Magic AI Tab Active State */
+.neo-segment-btn.magic-ai-tab.active {
+  background: linear-gradient(135deg, #00f5ff 0%, #8b5cf6 100%);
+  color: #0b0d13;
+  font-weight: 800;
+  border-color: var(--border-color);
+  box-shadow: 0 0 12px var(--neo-cyan-glow);
+}
+
+/* AI Tag Pill */
+.ai-tag-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  background: var(--neo-cyan-light);
+  color: var(--neo-cyan);
+  border: 1.5px solid var(--neo-cyan);
+  border-radius: var(--radius-pill);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* AI Toggle Active Highlight */
+.neo-toggle-box.ai-active {
+  border-color: var(--neo-cyan);
+  background: var(--neo-cyan-light);
+  box-shadow: 0 0 8px var(--neo-cyan-glow);
+}
+
+/* AI Meta & Feature Cards */
+.ai-dewarp-meta-card,
+.ai-feature-card {
+  padding: 12px 14px;
+  background: var(--bg-surface-elevated);
+  border: var(--border-width) solid var(--neo-cyan);
+  border-radius: var(--radius-md);
+  margin-top: 10px;
+  box-shadow: 0 0 12px var(--neo-cyan-glow);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-feature-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-badge-title {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.ai-feature-desc {
+  font-size: 11px;
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+.ai-corner-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-corner-label {
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+/* ==========================================================================
+   Canvas AI Quad Corner Overlay (PagesGeomNet)
+   ========================================================================== */
+.ai-corners-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 25;
+}
+
+.ai-corners-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ai-quad-polygon {
+  fill: rgba(0, 245, 255, 0.12);
+  stroke: var(--neo-cyan);
+  stroke-width: 2.5px;
+  stroke-dasharray: 6 3;
+  animation: dashAnimation 16s linear infinite;
+}
+
+@keyframes dashAnimation {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+.ai-corner-handle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #0b0d13;
+  border: 2.5px solid var(--neo-cyan);
+  box-shadow: 0 0 10px var(--neo-cyan-glow), var(--shadow-hard-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--neo-cyan);
+  cursor: grab;
+  pointer-events: auto;
+  z-index: 30;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.ai-corner-handle:hover {
+  transform: translate(-50%, -50%) scale(1.25);
+  box-shadow: 0 0 18px var(--neo-cyan);
+  color: #ffffff;
+  background: #181824;
+}
+
+.ai-corner-handle:active {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
 
