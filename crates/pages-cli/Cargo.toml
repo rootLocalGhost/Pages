@@ -9,8 +9,9 @@ name = "pages-cli"
 path = "src/main.rs"
 
 [dependencies]
-pages-core = { path = "../pages-core" }
+pages-core = { path = "../pages-core", features = ["ai", "directml"] }
 pages-imageproc = { path = "../pages-imageproc" }
+pages-math = { path = "../pages-math" }
 clap = { workspace = true, features = ["derive"] }
 image.workspace = true
 anyhow.workspace = true
