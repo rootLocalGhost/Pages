@@ -27,7 +27,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 rayon = { workspace = true }
 image = { workspace = true }
-pages-core = { path = "../crates/pages-core" }
+pages-core = { path = "../crates/pages-core", features = ["ai", "directml"] }
 pages-imageproc = { path = "../crates/pages-imageproc" }
 pages-dewarp = { path = "../crates/pages-dewarp" }
 pages-math = { path = "../crates/pages-math" }
