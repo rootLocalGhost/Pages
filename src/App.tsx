@@ -60,6 +60,11 @@ export default function App() {
   const [isDraggingCurtain, setIsDraggingCurtain] = createSignal(false);
   const [isDraggingCutLine, setIsDraggingCutLine] = createSignal(false);
 
+  // Neural AI Engine State
+  const [selectedAiDevice, setSelectedAiDevice] = createSignal("auto");
+  const [isFastMode, setIsFastMode] = createSignal(false);
+  const [activeAiCornerIndex, setActiveAiCornerIndex] = createSignal<number | null>(null);
+
   // Content Box Interactive State
   const [isDraggingCropBox, setIsDraggingCropBox] = createSignal(false);
   const [cropDragHandle, setCropDragHandle] = createSignal<string | null>(null);
@@ -524,10 +529,136 @@ export default function App() {
         sauvola_window: curr.sauvola_window,
         despeckle: curr.despeckle,
         dewarp: curr.dewarp,
+        ai_dewarp_active: curr.ai_dewarp_active,
         dpi: curr.dpi,
       }))
     );
     addToast(`Output settings applied to all ${pages().length} pages!`, "success");
+  };
+
+  // Neural Hardware Execution Provider Switcher
+  const handleDeviceChange = async (device: string) => {
+    setSelectedAiDevice(device);
+    try {
+      await invoke("set_ai_device", { device });
+      const info = await invoke<SystemInfo>("get_system_info");
+      setSystemInfo(info);
+      addToast(`AI compute device switched to: ${info.ai_hardware}`, "success");
+    } catch (err: any) {
+      addToast(`Failed to switch device: ${err}`, "error");
+    }
+  };
+
+  // 1-Click Magic AI Restore (Full 2-Stage Neural Dewarp + CleanNet)
+  const handleMagicAiRestore = async () => {
+    const page = activePage();
+    if (!page) {
+      addToast("Please select a scan page first", "info");
+      return;
+    }
+    setIsLoading(true);
+    addToast("Running Magic AI: 2-stage neural dewarp + pure white restoration...", "info");
+    try {
+      const res = await invoke<StagePreviewResult>("ai_restore_page", {
+        page,
+        fast: isFastMode(),
+      });
+      setPreviewResult(res);
+      setPages((all) =>
+        all.map((p) =>
+          p.id === page.id
+            ? {
+                ...p,
+                output_mode: "magic_ai",
+                ai_dewarp_active: true,
+                ai_corners: res.ai_corners || p.ai_corners,
+              }
+            : p
+        )
+      );
+      setActiveStage("output");
+      setShowCurtainComparison(true);
+      addToast("Magic AI Restoration complete! Check the Before/After comparison.", "success");
+    } catch (err: any) {
+      addToast(`Magic AI Restore failed: ${err}`, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // AI Neural Perspective Dewarp & Corner Detection (PagesGeomNet)
+  const handleToggleAiDewarp = async () => {
+    const page = activePage();
+    if (!page) return;
+    const next = !page.ai_dewarp_active;
+    setIsLoading(true);
+    try {
+      let corners = page.ai_corners;
+      if (next && !corners) {
+        addToast("Detecting document boundary quad via PagesGeomNet...", "info");
+        corners = await invoke<[number, number, number, number, number, number, number, number]>("ai_detect_corners", { page });
+      }
+      setPages((all) =>
+        all.map((p) =>
+          p.id === page.id
+            ? { ...p, ai_dewarp_active: next, ai_corners: corners }
+            : p
+        )
+      );
+      refreshPreview();
+      addToast(next ? "AI Neural Perspective Dewarp enabled" : "AI Neural Dewarp disabled", "info");
+    } catch (err: any) {
+      addToast(`AI Dewarp error: ${err}`, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRedetectCorners = async () => {
+    const page = activePage();
+    if (!page) return;
+    setIsLoading(true);
+    addToast("Re-analyzing scan geometry with PagesGeomNet...", "info");
+    try {
+      const corners = await invoke<[number, number, number, number, number, number, number, number]>("ai_detect_corners", { page });
+      setPages((all) =>
+        all.map((p) =>
+          p.id === page.id
+            ? { ...p, ai_dewarp_active: true, ai_corners: corners }
+            : p
+        )
+      );
+      refreshPreview();
+      addToast("Document boundary corners re-detected!", "success");
+    } catch (err: any) {
+      addToast(`Detection failed: ${err}`, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetCorners = () => {
+    const page = activePage();
+    if (!page) return;
+    const w = previewResult()?.width || page.width;
+    const h = previewResult()?.height || page.height;
+    const padX = Math.round(w * 0.03);
+    const padY = Math.round(h * 0.03);
+    const resetCorners: [number, number, number, number, number, number, number, number] = [
+      padX, padY,
+      w - padX, padY,
+      w - padX, h - padY,
+      padX, h - padY,
+    ];
+    setPages((all) =>
+      all.map((p) =>
+        p.id === page.id
+          ? { ...p, ai_corners: resetCorners }
+          : p
+      )
+    );
+    debouncedRefreshPreview(60);
+    addToast("Corners reset to image frame margin", "info");
   };
 
   // Run Batch Processing & Export
@@ -673,6 +804,29 @@ export default function App() {
         }
       }
     }
+
+    // AI Quad Corner Anchor Drag (PagesGeomNet bounds)
+    if (activeAiCornerIndex() !== null && previewResult()) {
+      const container = document.querySelector(".image-canvas-wrapper") as HTMLElement;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const scaleX = previewResult()!.width / rect.width;
+        const scaleY = previewResult()!.height / rect.height;
+        const imgX = (e.clientX - rect.left) * scaleX;
+        const imgY = (e.clientY - rect.top) * scaleY;
+        const clampedX = Math.max(0, Math.min(previewResult()!.width, Math.round(imgX)));
+        const clampedY = Math.max(0, Math.min(previewResult()!.height, Math.round(imgY)));
+
+        const curr = activePage();
+        if (curr && curr.ai_corners) {
+          const nextCorners: [number, number, number, number, number, number, number, number] = [...curr.ai_corners];
+          const idx = activeAiCornerIndex()!;
+          nextCorners[idx * 2] = clampedX;
+          nextCorners[idx * 2 + 1] = clampedY;
+          setPages((all) => all.map((p) => (p.id === curr.id ? { ...p, ai_corners: nextCorners } : p)));
+        }
+      }
+    }
   };
 
   const handleCanvasMouseUp = () => {
@@ -684,6 +838,10 @@ export default function App() {
     if (isDraggingCurtain()) setIsDraggingCurtain(false);
     if (isDraggingCropBox()) setIsDraggingCropBox(false);
     if (cropDragHandle()) setCropDragHandle(null);
+    if (activeAiCornerIndex() !== null) {
+      setActiveAiCornerIndex(null);
+      debouncedRefreshPreview(60);
+    }
   };
 
   const handleCanvasWheel = (e: WheelEvent) => {
@@ -715,10 +873,27 @@ export default function App() {
         </div>
 
         <div class="header-center-telemetry">
+          <Show when={systemInfo()?.ai_ready}>
+            <div class="neo-pill-badge ai-telemetry-pill" title="Neural Hardware Execution Provider">
+              <span class="status-dot cyan pulse"></span>
+              <span class="ai-chip-label">AI:</span>
+              <select
+                class="ai-hardware-select"
+                value={selectedAiDevice()}
+                onChange={(e) => handleDeviceChange(e.currentTarget.value)}
+              >
+                <option value="auto">⚡ Auto ({systemInfo()!.ai_hardware})</option>
+                <option value="directml">🎮 DirectML (Intel Arc / GPU)</option>
+                <option value="openvino">🔷 OpenVINO (Xe / CPU)</option>
+                <option value="cpu">💻 CPU Multithreaded</option>
+              </select>
+            </div>
+          </Show>
+
           <Show when={systemInfo()}>
             <div class="neo-pill-badge lime">
               <span class="status-dot green"></span>
-              <span>Rayon Engine ({systemInfo()!.cpu_cores} Cores)</span>
+              <span>Rayon ({systemInfo()!.cpu_cores} Cores)</span>
             </div>
           </Show>
 
@@ -772,6 +947,16 @@ export default function App() {
           {/* PRIMARY IMPORT BUTTON */}
           <button class="neo-btn lime" onClick={handleImportImages}>
             📁 Import Scans
+          </button>
+
+          {/* 1-CLICK MAGIC AI RESTORE BUTTON */}
+          <button
+            class="neo-btn magic-ai-glow"
+            onClick={handleMagicAiRestore}
+            disabled={!activePage() || isLoading()}
+            title="1-Click Magic AI: Neural Perspective Dewarp + Pure-White Paper Restoration"
+          >
+            ⚡ Magic AI Restore
           </button>
 
           <button class="neo-btn purple" onClick={startBatchProcessing} disabled={pages().length === 0}>
@@ -1013,6 +1198,82 @@ export default function App() {
                       transform: `rotate(${activePage()?.deskew_angle || 0}deg)`,
                     }}
                   ></div>
+                </Show>
+
+                {/* Stage 3 Overlay: AI Quad Neural Bounds (PagesGeomNet) */}
+                <Show when={activeStage() === "deskew" && activePage()?.ai_dewarp_active && activePage()?.ai_corners && (previewResult()?.width || activePage()!.width) > 0}>
+                  <div class="ai-corners-overlay">
+                    <svg
+                      viewBox={`0 0 ${previewResult()?.width || activePage()!.width} ${previewResult()?.height || activePage()!.height}`}
+                      class="ai-corners-svg"
+                    >
+                      <polygon
+                        points={`${activePage()!.ai_corners![0]},${activePage()!.ai_corners![1]} ${activePage()!.ai_corners![2]},${activePage()!.ai_corners![3]} ${activePage()!.ai_corners![4]},${activePage()!.ai_corners![5]} ${activePage()!.ai_corners![6]},${activePage()!.ai_corners![7]}`}
+                        class="ai-quad-polygon"
+                      />
+                    </svg>
+
+                    {/* 4 Interactive Corner Anchors */}
+                    <div
+                      class="ai-corner-handle tl"
+                      style={{
+                        left: `${(activePage()!.ai_corners![0] / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                        top: `${(activePage()!.ai_corners![1] / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setActiveAiCornerIndex(0);
+                      }}
+                      title="Top-Left Quad Corner (Drag to adjust)"
+                    >
+                      <span>TL</span>
+                    </div>
+
+                    <div
+                      class="ai-corner-handle tr"
+                      style={{
+                        left: `${(activePage()!.ai_corners![2] / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                        top: `${(activePage()!.ai_corners![3] / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setActiveAiCornerIndex(1);
+                      }}
+                      title="Top-Right Quad Corner (Drag to adjust)"
+                    >
+                      <span>TR</span>
+                    </div>
+
+                    <div
+                      class="ai-corner-handle br"
+                      style={{
+                        left: `${(activePage()!.ai_corners![4] / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                        top: `${(activePage()!.ai_corners![5] / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setActiveAiCornerIndex(2);
+                      }}
+                      title="Bottom-Right Quad Corner (Drag to adjust)"
+                    >
+                      <span>BR</span>
+                    </div>
+
+                    <div
+                      class="ai-corner-handle bl"
+                      style={{
+                        left: `${(activePage()!.ai_corners![6] / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                        top: `${(activePage()!.ai_corners![7] / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setActiveAiCornerIndex(3);
+                      }}
+                      title="Bottom-Left Quad Corner (Drag to adjust)"
+                    >
+                      <span>BL</span>
+                    </div>
+                  </div>
                 </Show>
 
                 {/* Stage 4 Overlay: Draggable & Resizable Content Box */}
@@ -1273,6 +1534,45 @@ export default function App() {
               </div>
 
               <div class="stage-card-body">
+                {/* AI Neural Dewarp (PagesGeomNet) */}
+                <div
+                  class={`neo-toggle-box ${activePage()?.ai_dewarp_active ? "ai-active" : ""}`}
+                  onClick={handleToggleAiDewarp}
+                >
+                  <div>
+                    <div class="toggle-title-bold" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                      <span>⚡ AI Neural Dewarp & Bounds</span>
+                      <span class="ai-tag-pill">PagesGeomNet</span>
+                    </div>
+                    <div class="toggle-sub-hint">Sub-pixel corner detection & true 2D projective homography</div>
+                  </div>
+                  <div class={`neo-switch ${activePage()?.ai_dewarp_active ? "active" : ""}`}>
+                    <div class="neo-switch-knob"></div>
+                  </div>
+                </div>
+
+                <Show when={activePage()?.ai_dewarp_active}>
+                  <div class="ai-dewarp-meta-card">
+                    <div class="ai-corner-summary">
+                      <span class="ai-corner-label">Detected Paper Quad:</span>
+                      <span class="font-mono" style={{ "font-size": "11px", color: "var(--neo-cyan, #00f5ff)" }}>
+                        {activePage()?.ai_corners ? "4 Corners Extracted & Locked" : "Pending Detection"}
+                      </span>
+                    </div>
+                    <div class="batch-btn-row" style={{ "margin-top": "8px" }}>
+                      <button class="neo-btn sm cyan" onClick={handleRedetectCorners} title="Re-run PagesGeomNet corner inference">
+                        🎯 Re-Detect Corners
+                      </button>
+                      <button class="neo-btn sm" onClick={handleResetCorners} title="Reset corners to image frame bounds">
+                        ↺ Frame Quad
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+
+                <div class="neo-card-header" style={{ "margin-top": "10px" }}>
+                  <span class="neo-card-title">Fine Angle Rotation</span>
+                </div>
                 <input
                   type="range"
                   min="-20.0"
@@ -1551,7 +1851,47 @@ export default function App() {
                   >
                     Color
                   </button>
+                  <button
+                    class={`neo-segment-btn ${activePage()?.output_mode === "magic_ai" ? "active magic-ai-tab" : ""}`}
+                    onClick={() => {
+                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "magic_ai" } : p)));
+                      refreshPreview();
+                    }}
+                  >
+                    ⚡ Magic AI
+                  </button>
                 </div>
+
+                <Show when={activePage()?.output_mode === "magic_ai"}>
+                  <div class="ai-feature-card">
+                    <div class="ai-feature-title">
+                      <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                        <span class="ai-badge-title">Pages Shine (CleanNet)</span>
+                        <span class="sticker-badge cyan">Neural Stage 2</span>
+                      </div>
+                    </div>
+                    <p class="ai-feature-desc">
+                      100% pure white paper background restoration, native text darkening, shadow scrub, and ink sharpening.
+                    </p>
+
+                    <div
+                      class={`neo-toggle-box ${isFastMode() ? "ai-active" : ""}`}
+                      onClick={() => {
+                        setIsFastMode(!isFastMode());
+                        refreshPreview();
+                      }}
+                      style={{ "margin-top": "8px" }}
+                    >
+                      <div>
+                        <div class="toggle-title-bold">⚡ Low-Power Fast Mode</div>
+                        <div class="toggle-sub-hint">384px fast-tiled inference (optimized for laptops & low-power PCs)</div>
+                      </div>
+                      <div class={`neo-switch ${isFastMode() ? "active" : ""}`}>
+                        <div class="neo-switch-knob"></div>
+                      </div>
+                    </div>
+                  </div>
+                </Show>
 
                 <Show when={activePage()?.output_mode === "bw"}>
                   <div class="neo-card-header">
