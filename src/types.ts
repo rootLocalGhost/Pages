@@ -40,12 +40,14 @@ export interface PageItem {
   auto_deskew_angle?: number | null;
   content_box?: ContentBoxDto | null;
   margins: MarginsDto;
-  output_mode: "bw" | "grayscale" | "color";
+  output_mode: "bw" | "grayscale" | "color" | "magic" | "magic_ai";
   binarization_method: "sauvola" | "wolf" | "otsu";
   sauvola_k: number;
   sauvola_window: number;
   despeckle: boolean;
   dewarp: boolean;
+  ai_dewarp_active?: boolean;
+  ai_corners?: [[number, number], [number, number], [number, number], [number, number]] | null;
   dpi: number;
   thumbnail_path?: string | null;
 }
@@ -58,6 +60,8 @@ export interface StagePreviewResult {
   auto_deskew_angle?: number | null;
   auto_content_box?: ContentBoxDto | null;
   split_info?: SplitResultDto | null;
+  ai_corners?: [[number, number], [number, number], [number, number], [number, number]] | null;
+  ai_device?: string | null;
 }
 
 export interface BatchProgressEvent {
@@ -71,6 +75,8 @@ export interface SystemInfo {
   cpu_cores: number;
   app_version: string;
   temp_dir: string;
+  ai_ready?: boolean;
+  ai_hardware?: string;
 }
 
 export interface ToastMessage {
