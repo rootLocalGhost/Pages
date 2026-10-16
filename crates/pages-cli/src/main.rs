@@ -247,7 +247,11 @@ fn run_cli() -> anyhow::Result<()> {
         .input
         .as_ref()
         .or_else(|| args.project.as_ref())
-        .ok_or_else(|| anyhow::anyhow!("Either --input or --project must be specified (use --help for options)"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Either --input or --project must be specified (use --help for options)"
+            )
+        })?;
 
     let output_dir = args
         .output
@@ -310,7 +314,11 @@ fn run_cli() -> anyhow::Result<()> {
             println!("================================================================");
             println!(" Pages AI — Neural Restoration & Geometry Engine");
             println!(" Target Compute Device: {}", dev_name);
-            println!(" Models: {} | {}", model_paths.geom_path.display(), model_paths.clean_path.display());
+            println!(
+                " Models: {} | {}",
+                model_paths.geom_path.display(),
+                model_paths.clean_path.display()
+            );
             println!("================================================================");
             println!("Processing {} images...", images.len());
         }

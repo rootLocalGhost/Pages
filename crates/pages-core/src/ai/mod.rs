@@ -43,7 +43,9 @@ impl std::str::FromStr for AiDeviceChoice {
             "directml" | "dml" | "gpu" => Ok(AiDeviceChoice::DirectML),
             "openvino" | "ov" => Ok(AiDeviceChoice::OpenVINO),
             "cpu" => Ok(AiDeviceChoice::Cpu),
-            other => Err(format!("Unknown device '{other}'. Choices: auto, directml, openvino, cpu")),
+            other => Err(format!(
+                "Unknown device '{other}'. Choices: auto, directml, openvino, cpu"
+            )),
         }
     }
 }
@@ -140,8 +142,12 @@ pub fn discover_models(custom_dir: Option<&Path>) -> anyhow::Result<AiModelPaths
     candidate_dirs.push(PathBuf::from("onnx_models"));
     candidate_dirs.push(PathBuf::from("../onnx_models"));
     candidate_dirs.push(PathBuf::from("../../onnx_models"));
-    candidate_dirs.push(PathBuf::from("c:/Users/LEADER/Desktop/Pages-AI/Pages/models"));
-    candidate_dirs.push(PathBuf::from("c:/Users/LEADER/Desktop/Pages-AI/onnx_models"));
+    candidate_dirs.push(PathBuf::from(
+        "c:/Users/LEADER/Desktop/Pages-AI/Pages/models",
+    ));
+    candidate_dirs.push(PathBuf::from(
+        "c:/Users/LEADER/Desktop/Pages-AI/onnx_models",
+    ));
 
     for dir in &candidate_dirs {
         let geom_cand1 = dir.join("pages_geom_v1.onnx");
@@ -275,9 +281,12 @@ impl PagesAiEngine {
             _ => {}
         }
 
-        builder
-            .commit_from_file(model_path)
-            .map_err(|e| anyhow::anyhow!("Failed to load ONNX model from {}: {e}", model_path.display()))
+        builder.commit_from_file(model_path).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to load ONNX model from {}: {e}",
+                model_path.display()
+            )
+        })
     }
 
     #[cfg(feature = "ai")]
@@ -355,12 +364,8 @@ impl PagesAiEngine {
             }
 
             // Downsample input to fixed 512x512 thumbnail for geometry network
-            let thumb = image::imageops::resize(
-                img,
-                512,
-                512,
-                image::imageops::FilterType::Triangle,
-            );
+            let thumb =
+                image::imageops::resize(img, 512, 512, image::imageops::FilterType::Triangle);
 
             // Shape [1, 3, 512, 512] float32 normalized [0.0, 1.0]
             let mut input_tensor = vec![0.0f32; 3 * 512 * 512];
@@ -376,12 +381,17 @@ impl PagesAiEngine {
             }
 
             let input_shape = vec![1i64, 3, 512, 512];
-            let tensor = ort::value::Tensor::from_array((input_shape, input_tensor.into_boxed_slice()))
-                .map_err(|e| anyhow::anyhow!("Tensor creation failed: {e}"))?;
+            let tensor =
+                ort::value::Tensor::from_array((input_shape, input_tensor.into_boxed_slice()))
+                    .map_err(|e| anyhow::anyhow!("Tensor creation failed: {e}"))?;
             let inputs = ort::inputs!["input" => tensor];
 
-            let mut sess = sess_arc.lock().map_err(|e| anyhow::anyhow!("Mutex lock: {e}"))?;
-            let outputs = sess.run(inputs).map_err(|e| anyhow::anyhow!("Inference failed: {e}"))?;
+            let mut sess = sess_arc
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Mutex lock: {e}"))?;
+            let outputs = sess
+                .run(inputs)
+                .map_err(|e| anyhow::anyhow!("Inference failed: {e}"))?;
 
             // Extract corner_heatmaps: [1, 4, 128, 128]
             let (_c_shape, corners_slice) = outputs["corner_heatmaps"]
@@ -596,8 +606,9 @@ impl PagesAiEngine {
                 }
             });
 
-        let mut dewarped_img = ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(target_w, target_h, dewarped_buf)
-            .ok_or_else(|| anyhow::anyhow!("Failed to construct dewarped RgbImage"))?;
+        let mut dewarped_img =
+            ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(target_w, target_h, dewarped_buf)
+                .ok_or_else(|| anyhow::anyhow!("Failed to construct dewarped RgbImage"))?;
 
         // Subtle Inset Crop (0.8%) to eliminate border edge bleed
         let inset_x = ((target_w as f64 * 0.008).round() as u32).min(target_w / 8);
@@ -662,9 +673,16 @@ impl PagesAiEngine {
             // Precompute 2D Hann window of size effective_tile x effective_tile
             let mut hann = vec![0.0f32; effective_tile * effective_tile];
             for ty in 0..effective_tile {
-                let wy = 0.5 * (1.0 - ((2.0 * std::f32::consts::PI * ty as f32) / (effective_tile - 1) as f32).cos());
+                let wy = 0.5
+                    * (1.0
+                        - ((2.0 * std::f32::consts::PI * ty as f32) / (effective_tile - 1) as f32)
+                            .cos());
                 for tx in 0..effective_tile {
-                    let wx = 0.5 * (1.0 - ((2.0 * std::f32::consts::PI * tx as f32) / (effective_tile - 1) as f32).cos());
+                    let wx = 0.5
+                        * (1.0
+                            - ((2.0 * std::f32::consts::PI * tx as f32)
+                                / (effective_tile - 1) as f32)
+                                .cos());
                     hann[ty * effective_tile + tx] = (wx * wy).max(0.01);
                 }
             }
@@ -715,12 +733,19 @@ impl PagesAiEngine {
                     }
 
                     let input_shape = vec![1i64, 3, effective_tile as i64, effective_tile as i64];
-                    let tensor = ort::value::Tensor::from_array((input_shape, input_tensor.into_boxed_slice()))
-                        .map_err(|e| anyhow::anyhow!("Clean tensor creation failed: {e}"))?;
+                    let tensor = ort::value::Tensor::from_array((
+                        input_shape,
+                        input_tensor.into_boxed_slice(),
+                    ))
+                    .map_err(|e| anyhow::anyhow!("Clean tensor creation failed: {e}"))?;
                     let inputs = ort::inputs!["input" => tensor];
 
-                    let mut session = session_arc.lock().map_err(|e| anyhow::anyhow!("Mutex: {e}"))?;
-                    let outputs = session.run(inputs).map_err(|e| anyhow::anyhow!("Clean run: {e}"))?;
+                    let mut session = session_arc
+                        .lock()
+                        .map_err(|e| anyhow::anyhow!("Mutex: {e}"))?;
+                    let outputs = session
+                        .run(inputs)
+                        .map_err(|e| anyhow::anyhow!("Clean run: {e}"))?;
                     let (_out_shape, output_slice) = outputs["output"]
                         .try_extract_tensor::<f32>()
                         .map_err(|e| anyhow::anyhow!("Output tensor extraction failed: {e}"))?;
@@ -861,8 +886,7 @@ fn is_valid_quad(pts: &[Point2d; 4], w: u32, h: u32) -> bool {
     let s2 = cross_sign(*p2, *p3, *p0);
     let s3 = cross_sign(*p3, *p0, *p1);
 
-    (s0 > 0.0 && s1 > 0.0 && s2 > 0.0 && s3 > 0.0)
-        || (s0 < 0.0 && s1 < 0.0 && s2 < 0.0 && s3 < 0.0)
+    (s0 > 0.0 && s1 > 0.0 && s2 > 0.0 && s3 > 0.0) || (s0 < 0.0 && s1 < 0.0 && s2 < 0.0 && s3 < 0.0)
 }
 
 /// Refine paper quad corners by sampling normal edge gradients and intersecting lines.
@@ -915,22 +939,30 @@ pub fn refine_quad_edges(img: &RgbImage, corners: [Point2d; 4]) -> [Point2d; 4] 
 
     // Edge normal vectors pointing inwards
     let v_top = tr - tl;
-    let n_top = Point2d::new(-v_top.y, v_top.x).normalized().unwrap_or(Point2d::new(0.0, 1.0));
+    let n_top = Point2d::new(-v_top.y, v_top.x)
+        .normalized()
+        .unwrap_or(Point2d::new(0.0, 1.0));
     let n_top = if n_top.y < 0.0 { -n_top } else { n_top };
     let pts_top = sample_edge(tl, tr, n_top);
 
     let v_right = br - tr;
-    let n_right = Point2d::new(-v_right.y, v_right.x).normalized().unwrap_or(Point2d::new(-1.0, 0.0));
+    let n_right = Point2d::new(-v_right.y, v_right.x)
+        .normalized()
+        .unwrap_or(Point2d::new(-1.0, 0.0));
     let n_right = if n_right.x > 0.0 { -n_right } else { n_right };
     let pts_right = sample_edge(tr, br, n_right);
 
     let v_bot = br - bl;
-    let n_bot = Point2d::new(-v_bot.y, v_bot.x).normalized().unwrap_or(Point2d::new(0.0, -1.0));
+    let n_bot = Point2d::new(-v_bot.y, v_bot.x)
+        .normalized()
+        .unwrap_or(Point2d::new(0.0, -1.0));
     let n_bot = if n_bot.y > 0.0 { -n_bot } else { n_bot };
     let pts_bot = sample_edge(bl, br, n_bot);
 
     let v_left = bl - tl;
-    let n_left = Point2d::new(-v_left.y, v_left.x).normalized().unwrap_or(Point2d::new(1.0, 0.0));
+    let n_left = Point2d::new(-v_left.y, v_left.x)
+        .normalized()
+        .unwrap_or(Point2d::new(1.0, 0.0));
     let n_left = if n_left.x < 0.0 { -n_left } else { n_left };
     let pts_left = sample_edge(tl, bl, n_left);
 
@@ -1018,16 +1050,16 @@ pub fn detect_and_correct_fine_skew(img: &RgbImage, max_angle: f64) -> (RgbImage
 
     // Downscale to max dimension 800 for instant evaluation
     let max_dim = w.max(h);
-    let scale = if max_dim > 800 { 800.0 / max_dim as f64 } else { 1.0 };
+    let scale = if max_dim > 800 {
+        800.0 / max_dim as f64
+    } else {
+        1.0
+    };
     let thumb_w = (w as f64 * scale).round() as u32;
     let thumb_h = (h as f64 * scale).round() as u32;
 
-    let thumb = image::imageops::resize(
-        img,
-        thumb_w,
-        thumb_h,
-        image::imageops::FilterType::Nearest,
-    );
+    let thumb =
+        image::imageops::resize(img, thumb_w, thumb_h, image::imageops::FilterType::Nearest);
 
     let gray = image::imageops::grayscale(&thumb);
     let bin = pages_imageproc::binarize_sauvola(&gray, 15, 0.25, 0);
@@ -1112,8 +1144,8 @@ pub fn detect_and_correct_fine_skew(img: &RgbImage, max_angle: f64) -> (RgbImage
             }
         });
 
-    let rotated_img = ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(w, h, out_buf)
-        .unwrap_or_else(|| img.clone());
+    let rotated_img =
+        ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(w, h, out_buf).unwrap_or_else(|| img.clone());
 
     (rotated_img, angle_deg)
 }

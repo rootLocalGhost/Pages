@@ -1,8 +1,8 @@
 #[cfg(feature = "ai")]
 #[test]
 fn test_pages_ai_engine_load_and_infer() {
-    use pages_core::PagesAiEngine;
     use image::{Rgb, RgbImage};
+    use pages_core::PagesAiEngine;
     use std::path::Path;
 
     // Path to model in standalone Pages-AI project
