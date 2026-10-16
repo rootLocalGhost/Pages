@@ -27,10 +27,13 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 rayon = { workspace = true }
 image = { workspace = true }
-pages-core = { path = "../crates/pages-core", features = ["ai", "directml"] }
+pages-core = { path = "../crates/pages-core", features = ["ai"] }
 pages-imageproc = { path = "../crates/pages-imageproc" }
 pages-dewarp = { path = "../crates/pages-dewarp" }
 pages-math = { path = "../crates/pages-math" }
 base64 = "0.22"
 num_cpus = "1.16"
 tokio = { version = "1", features = ["full"] }
+
+[target.'cfg(windows)'.dependencies]
+pages-core = { path = "../crates/pages-core", features = ["directml"] }
