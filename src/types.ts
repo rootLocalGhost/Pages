@@ -27,6 +27,8 @@ export interface SplitResultDto {
   right_rect?: ContentBoxDto | null;
 }
 
+export type QuadCorners = [[number, number], [number, number], [number, number], [number, number]];
+
 export interface PageItem {
   id: string;
   file_path: string;
@@ -47,7 +49,7 @@ export interface PageItem {
   despeckle: boolean;
   dewarp: boolean;
   ai_dewarp_active?: boolean;
-  ai_corners?: [[number, number], [number, number], [number, number], [number, number]] | null;
+  ai_corners?: QuadCorners | null;
   dpi: number;
   thumbnail_path?: string | null;
 }
@@ -60,7 +62,7 @@ export interface StagePreviewResult {
   auto_deskew_angle?: number | null;
   auto_content_box?: ContentBoxDto | null;
   split_info?: SplitResultDto | null;
-  ai_corners?: [[number, number], [number, number], [number, number], [number, number]] | null;
+  ai_corners?: QuadCorners | null;
   ai_device?: string | null;
 }
 
