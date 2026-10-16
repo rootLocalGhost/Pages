@@ -7,8 +7,8 @@ license.workspace = true
 [features]
 default = []
 ai = ["dep:ort"]
-directml = ["ai", "ort/directml"]
-openvino = ["ai", "ort/openvino"]
+directml = ["ai", "ort/directml", "ort/lax-feature-matching"]
+openvino = ["ai", "ort/openvino", "ort/lax-feature-matching"]
 
 [dependencies]
 pages-math = { path = "../pages-math" }
