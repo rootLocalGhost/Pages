@@ -9,7 +9,7 @@ name = "pages-cli"
 path = "src/main.rs"
 
 [dependencies]
-pages-core = { path = "../pages-core", features = ["ai", "directml"] }
+pages-core = { path = "../pages-core", features = ["ai"] }
 pages-imageproc = { path = "../pages-imageproc" }
 pages-math = { path = "../pages-math" }
 clap = { workspace = true, features = ["derive"] }
@@ -17,3 +17,6 @@ image.workspace = true
 anyhow.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+pages-core = { path = "../pages-core", features = ["directml"] }
