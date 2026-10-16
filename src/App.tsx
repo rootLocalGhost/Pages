@@ -10,6 +10,7 @@ import {
   SystemInfo,
   ToastMessage,
   ContentBoxDto,
+  QuadCorners,
 } from "./types";
 import "./App.css";
 
@@ -560,7 +561,8 @@ export default function App() {
     addToast("Running Magic AI: 2-stage neural dewarp + pure white restoration...", "info");
     try {
       const res = await invoke<StagePreviewResult>("ai_restore_page", {
-        page,
+        imagePath: page.file_path,
+        orientation: page.orientation,
         fast: isFastMode(),
       });
       setPreviewResult(res);
@@ -596,7 +598,7 @@ export default function App() {
       let corners = page.ai_corners;
       if (next && !corners) {
         addToast("Detecting document boundary quad via PagesGeomNet...", "info");
-        corners = await invoke<[number, number, number, number, number, number, number, number]>("ai_detect_corners", { page });
+        corners = await invoke<QuadCorners>("ai_detect_corners", { imagePath: page.file_path });
       }
       setPages((all) =>
         all.map((p) =>
@@ -620,7 +622,7 @@ export default function App() {
     setIsLoading(true);
     addToast("Re-analyzing scan geometry with PagesGeomNet...", "info");
     try {
-      const corners = await invoke<[number, number, number, number, number, number, number, number]>("ai_detect_corners", { page });
+      const corners = await invoke<QuadCorners>("ai_detect_corners", { imagePath: page.file_path });
       setPages((all) =>
         all.map((p) =>
           p.id === page.id
@@ -644,11 +646,11 @@ export default function App() {
     const h = previewResult()?.height || page.height;
     const padX = Math.round(w * 0.03);
     const padY = Math.round(h * 0.03);
-    const resetCorners: [number, number, number, number, number, number, number, number] = [
-      padX, padY,
-      w - padX, padY,
-      w - padX, h - padY,
-      padX, h - padY,
+    const resetCorners: QuadCorners = [
+      [padX, padY],
+      [w - padX, padY],
+      [w - padX, h - padY],
+      [padX, h - padY],
     ];
     setPages((all) =>
       all.map((p) =>
@@ -819,10 +821,14 @@ export default function App() {
 
         const curr = activePage();
         if (curr && curr.ai_corners) {
-          const nextCorners: [number, number, number, number, number, number, number, number] = [...curr.ai_corners];
           const idx = activeAiCornerIndex()!;
-          nextCorners[idx * 2] = clampedX;
-          nextCorners[idx * 2 + 1] = clampedY;
+          const nextCorners: QuadCorners = [
+            [curr.ai_corners[0][0], curr.ai_corners[0][1]],
+            [curr.ai_corners[1][0], curr.ai_corners[1][1]],
+            [curr.ai_corners[2][0], curr.ai_corners[2][1]],
+            [curr.ai_corners[3][0], curr.ai_corners[3][1]],
+          ];
+          nextCorners[idx] = [clampedX, clampedY];
           setPages((all) => all.map((p) => (p.id === curr.id ? { ...p, ai_corners: nextCorners } : p)));
         }
       }
@@ -1208,7 +1214,7 @@ export default function App() {
                       class="ai-corners-svg"
                     >
                       <polygon
-                        points={`${activePage()!.ai_corners![0]},${activePage()!.ai_corners![1]} ${activePage()!.ai_corners![2]},${activePage()!.ai_corners![3]} ${activePage()!.ai_corners![4]},${activePage()!.ai_corners![5]} ${activePage()!.ai_corners![6]},${activePage()!.ai_corners![7]}`}
+                        points={`${activePage()!.ai_corners![0][0]},${activePage()!.ai_corners![0][1]} ${activePage()!.ai_corners![1][0]},${activePage()!.ai_corners![1][1]} ${activePage()!.ai_corners![2][0]},${activePage()!.ai_corners![2][1]} ${activePage()!.ai_corners![3][0]},${activePage()!.ai_corners![3][1]}`}
                         class="ai-quad-polygon"
                       />
                     </svg>
@@ -1217,8 +1223,8 @@ export default function App() {
                     <div
                       class="ai-corner-handle tl"
                       style={{
-                        left: `${(activePage()!.ai_corners![0] / (previewResult()?.width || activePage()!.width)) * 100}%`,
-                        top: `${(activePage()!.ai_corners![1] / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                        left: `${(activePage()!.ai_corners![0][0] / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                        top: `${(activePage()!.ai_corners![0][1] / (previewResult()?.height || activePage()!.height)) * 100}%`,
                       }}
                       onMouseDown={(e) => {
                         e.stopPropagation();
@@ -1232,8 +1238,8 @@ export default function App() {
                     <div
                       class="ai-corner-handle tr"
                       style={{
-                        left: `${(activePage()!.ai_corners![2] / (previewResult()?.width || activePage()!.width)) * 100}%`,
-                        top: `${(activePage()!.ai_corners![3] / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                        left: `${(activePage()!.ai_corners![1][0] / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                        top: `${(activePage()!.ai_corners![1][1] / (previewResult()?.height || activePage()!.height)) * 100}%`,
                       }}
                       onMouseDown={(e) => {
                         e.stopPropagation();
@@ -1247,8 +1253,8 @@ export default function App() {
                     <div
                       class="ai-corner-handle br"
                       style={{
-                        left: `${(activePage()!.ai_corners![4] / (previewResult()?.width || activePage()!.width)) * 100}%`,
-                        top: `${(activePage()!.ai_corners![5] / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                        left: `${(activePage()!.ai_corners![2][0] / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                        top: `${(activePage()!.ai_corners![2][1] / (previewResult()?.height || activePage()!.height)) * 100}%`,
                       }}
                       onMouseDown={(e) => {
                         e.stopPropagation();
@@ -1262,8 +1268,8 @@ export default function App() {
                     <div
                       class="ai-corner-handle bl"
                       style={{
-                        left: `${(activePage()!.ai_corners![6] / (previewResult()?.width || activePage()!.width)) * 100}%`,
-                        top: `${(activePage()!.ai_corners![7] / (previewResult()?.height || activePage()!.height)) * 100}%`,
+                        left: `${(activePage()!.ai_corners![3][0] / (previewResult()?.width || activePage()!.width)) * 100}%`,
+                        top: `${(activePage()!.ai_corners![3][1] / (previewResult()?.height || activePage()!.height)) * 100}%`,
                       }}
                       onMouseDown={(e) => {
                         e.stopPropagation();
