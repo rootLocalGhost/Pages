@@ -308,6 +308,24 @@ export default function App() {
     await refreshPreview();
   };
 
+  // Remove Page from Project
+  const removePage = (id: string, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    const curr = pages();
+    const next = curr.filter((p) => p.id !== id);
+    setPages(next);
+    if (selectedPageId() === id) {
+      if (next.length > 0) {
+        selectPage(next[0].id);
+      } else {
+        setSelectedPageId(null);
+        setPreviewResult(null);
+        setInstantPreviewSrc(null);
+      }
+    }
+    addToast("Scan page removed from project", "info");
+  };
+
   // Rotation
   const rotatePage = async (delta: number) => {
     const curr = activePage();
@@ -1029,7 +1047,7 @@ export default function App() {
             <button
               class="neo-btn icon-only sm"
               onClick={() => setFilmstripCollapsed(!filmstripCollapsed())}
-              title="Toggle Sidebar"
+              title={filmstripCollapsed() ? "Expand Sidebar" : "Collapse Sidebar"}
             >
               {filmstripCollapsed() ? "»" : "«"}
             </button>
@@ -1044,6 +1062,20 @@ export default function App() {
               onInput={(e) => setSearchFilter(e.currentTarget.value)}
             />
           </div>
+
+          <Show when={pages().length > 0}>
+            <div class="filmstrip-action-bar">
+              <button
+                class="neo-btn sm lime"
+                style={{ width: "100%" }}
+                onClick={handleBatchAutoAnalyzeAll}
+                disabled={isAnalyzing()}
+                title="Auto-detect deskew and content boxes for all pages"
+              >
+                ✨ Auto-Analyze All ({pages().length})
+              </button>
+            </div>
+          </Show>
 
           <div class="filmstrip-scroll">
             <Show
@@ -1077,9 +1109,18 @@ export default function App() {
                     </div>
 
                     <div class="page-details">
-                      <span class="page-title-text" title={page.file_name}>
-                        {page.file_name}
-                      </span>
+                      <div style={{ display: "flex", "align-items": "flex-start", "justify-content": "space-between", gap: "4px" }}>
+                        <span class="page-title-text" title={page.file_name}>
+                          {page.file_name}
+                        </span>
+                        <button
+                          class="page-remove-btn"
+                          onClick={(e) => removePage(page.id, e)}
+                          title="Remove scan from list"
+                        >
+                          ✕
+                        </button>
+                      </div>
                       <div class="page-metrics-text">
                         <span>{page.width} × {page.height} px</span>
                         <span>{page.dpi} DPI • {page.orientation}°</span>
@@ -1088,6 +1129,9 @@ export default function App() {
                         <span class="sticker-badge blue">{page.output_mode}</span>
                         <Show when={page.deskew_angle !== 0}>
                           <span class="sticker-badge coral">{page.deskew_angle.toFixed(1)}°</span>
+                        </Show>
+                        <Show when={page.ai_dewarp_active}>
+                          <span class="sticker-badge cyan">AI</span>
                         </Show>
                       </div>
                     </div>
@@ -1103,8 +1147,8 @@ export default function App() {
           {/* Floating Canvas Loading Indicator */}
           <Show when={isLoading()}>
             <div class="canvas-loading-pill">
-              <span class="processing-spinner">⚡</span>
-              <span>Rendering Preview...</span>
+              <span class="status-dot cyan pulse"></span>
+              <span>Rendering Studio Preview...</span>
             </div>
           </Show>
 
@@ -1116,17 +1160,23 @@ export default function App() {
             <Show
               when={activePage()}
               fallback={
-                <div style={{ "text-align": "center", "background": "var(--bg-surface)", "padding": "40px", "border": "var(--border-width) solid var(--border-color)", "border-radius": "var(--radius-lg)", "box-shadow": "var(--shadow-hard-lg)", "max-width": "460px" }}>
-                  <div style={{ "font-size": "48px", "margin-bottom": "12px" }}>📖</div>
-                  <h2 class="font-heading" style={{ "font-size": "20px", "font-weight": "800", "margin-bottom": "8px" }}>
-                    Pages Studio
+                <div class="empty-dropzone" onClick={handleImportImages}>
+                  <div class="dropzone-icon-circle">📖</div>
+                  <h2 class="font-heading" style={{ "font-size": "22px", "font-weight": "800", "margin-bottom": "8px" }}>
+                    Pages Document Studio
                   </h2>
-                  <p style={{ "font-size": "12px", "color": "var(--ink-muted)", "margin-bottom": "20px" }}>
-                    Import documents, manuscripts, or book scans to auto-straighten, crop, and binarize.
+                  <p style={{ "font-size": "13px", "color": "var(--ink-muted)", "max-width": "360px", "margin-bottom": "22px", "line-height": "1.5" }}>
+                    Drop high-resolution camera scans, flatbed scans, or manuscripts to unwarp, binarize, and enhance.
                   </p>
-                  <button class="neo-btn lime" onClick={handleImportImages}>
+                  <button class="neo-btn lime lg" onClick={(e) => { e.stopPropagation(); handleImportImages(); }}>
                     📁 Import Scan Files
                   </button>
+                  <div class="shortcut-pill-row">
+                    <span class="shortcut-pill">1-6: Switch Stages</span>
+                    <span class="shortcut-pill">Space + Drag: Pan</span>
+                    <span class="shortcut-pill">Scroll: Zoom</span>
+                    <span class="shortcut-pill">R: Rotate 90°</span>
+                  </div>
                 </div>
               }
             >
@@ -1403,653 +1453,650 @@ export default function App() {
             <button class="neo-btn icon-only sm" onClick={() => setZoom((z) => Math.min(z * 1.15, 5.0))} title="Zoom In">
               +
             </button>
-            <button class="neo-btn sm" onClick={resetView} title="Reset Scale">
+            <button class="neo-btn sm" onClick={resetView} title="Reset Scale (1:1)">
               1:1
             </button>
-            <button class="neo-btn sm" onClick={() => { setZoom(0.7); setPan({ x: 0, y: 0 }); }} title="Fit Screen">
+            <button class="neo-btn sm" onClick={() => { setZoom(0.7); setPan({ x: 0, y: 0 }); }} title="Fit to Screen">
               ⛶ Fit
             </button>
+            <Show when={activeStage() === "deskew"}>
+              <button
+                class={`neo-btn sm ${showDeskewGrid() ? "cyan" : ""}`}
+                onClick={() => setShowDeskewGrid(!showDeskewGrid())}
+                title="Toggle Alignment Grid"
+              >
+                Grid
+              </button>
+            </Show>
+            <Show when={activeStage() === "output"}>
+              <button
+                class={`neo-btn sm ${showCurtainComparison() ? "green" : ""}`}
+                onClick={() => setShowCurtainComparison(!showCurtainComparison())}
+                title="Toggle Before/After Curtain Split"
+              >
+                Curtain
+              </button>
+            </Show>
           </div>
         </section>
 
-        {/* Right Column: Unified Stage Inspector Panel (All Controls Scrollable & Permanently Expanded) */}
+        {/* Right Column: Modern Focused Stage Inspector */}
         <aside class="neo-inspector">
-          {/* Master Actions Bar */}
-          <div class="inspector-master-actions">
-            <button
-              class="neo-btn lime"
-              onClick={handleBatchAutoAnalyzeAll}
-              disabled={pages().length === 0 || isAnalyzing()}
-              title="Runs deskew and content box detection individually for each page"
-            >
-              ✨ Smart Auto-Analyze All Pages
-            </button>
-            <button
-              class="neo-btn purple sm"
-              onClick={startBatchProcessing}
-              disabled={pages().length === 0}
-            >
-              🚀 Export All Pages to Disk
-            </button>
-          </div>
-
           <Show
             when={activePage()}
             fallback={
-              <div class="neo-card">
-                <span style={{ "color": "var(--ink-muted)", "font-weight": "600" }}>
-                  Select a scan page to inspect and calibrate parameters.
-                </span>
+              <div style={{ padding: "30px 20px", "text-align": "center", color: "var(--ink-muted)" }}>
+                <div style={{ "font-size": "36px", "margin-bottom": "10px" }}>🔍</div>
+                <div class="font-heading" style={{ "font-weight": "800", "font-size": "14px", "margin-bottom": "4px" }}>
+                  No Page Selected
+                </div>
+                <p style={{ "font-size": "11px" }}>Select a scan from the filmstrip to inspect and tune parameters.</p>
               </div>
             }
           >
-            {/* Control Card 1: Orientation */}
-            <div
-              class={`neo-stage-card ${activeStage() === "orientation" ? "active" : ""}`}
-              onClick={() => setActiveStage("orientation")}
-            >
-              <div class="stage-card-header">
-                <div class="stage-card-header-left">
-                  <div class="stage-card-badge">1</div>
-                  <div class="stage-card-title-wrap">
-                    <span class="stage-card-title">↺ Orientation & Rotation</span>
-                    <span class="stage-card-desc">Rotate & flip scan orientation</span>
+            {/* Active Stage Focal Header Banner */}
+            <div class="stage-focal-header">
+              <div class="stage-focal-left">
+                <div class="stage-focal-num-badge">
+                  {STAGES.find((s) => s.id === activeStage())?.num || 1}
+                </div>
+                <div>
+                  <div class="stage-focal-title">
+                    {STAGES.find((s) => s.id === activeStage())?.name}
+                  </div>
+                  <div class="stage-focal-desc">
+                    {STAGES.find((s) => s.id === activeStage())?.desc}
                   </div>
                 </div>
-                <span class="font-mono" style={{ "font-weight": "800", "font-size": "12px" }}>
-                  {activePage()?.orientation}°
-                </span>
               </div>
 
-              <div class="stage-card-body">
-                <div class="neo-segmented-group">
-                  <button class="neo-segment-btn" onClick={() => rotatePage(-90)}>
-                    ↺ -90°
-                  </button>
-                  <button class="neo-segment-btn" onClick={() => rotatePage(180)}>
-                    ⇅ 180°
-                  </button>
-                  <button class="neo-segment-btn" onClick={() => rotatePage(90)}>
-                    ↻ +90°
-                  </button>
-                </div>
+              {/* Status Readout Pill */}
+              <Show when={activeStage() === "orientation"}>
+                <span class="sticker-badge blue">{activePage()?.orientation}°</span>
+              </Show>
+              <Show when={activeStage() === "split"}>
+                <span class="sticker-badge purple">{activePage()?.split_mode}</span>
+              </Show>
+              <Show when={activeStage() === "deskew"}>
+                <span class="sticker-badge coral">{activePage()?.deskew_angle.toFixed(2)}°</span>
+              </Show>
+              <Show when={activeStage() === "content" && activePage()?.content_box}>
+                <span class="sticker-badge cyan">{activePage()!.content_box!.width}×{activePage()!.content_box!.height}</span>
+              </Show>
+              <Show when={activeStage() === "margins"}>
+                <span class="sticker-badge lime">{activePage()?.margins.left}% M</span>
+              </Show>
+              <Show when={activeStage() === "output"}>
+                <span class="sticker-badge lime">{activePage()?.output_mode}</span>
+              </Show>
+            </div>
 
-                <div class="stage-action-btn-row">
+            {/* Scrollable Stage Dedicated Control Panel */}
+            <div class="stage-scroll-body">
+              {/* STAGE 1: ORIENTATION */}
+              <Show when={activeStage() === "orientation"}>
+                <div class="stage-controls-card">
+                  <div class="card-section-label">
+                    <span>Rotate & Flip</span>
+                    <span class="font-mono">{activePage()?.orientation}°</span>
+                  </div>
+                  <div class="neo-segmented-group">
+                    <button class="neo-segment-btn" onClick={() => rotatePage(-90)}>
+                      ↺ -90°
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => rotatePage(180)}>
+                      ⇅ 180°
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => rotatePage(90)}>
+                      ↻ +90°
+                    </button>
+                  </div>
+
                   <button class="neo-btn sm" onClick={handleAutoOrientation}>
                     ⚡ Auto-Detect Orientation (Current)
                   </button>
                 </div>
-              </div>
-            </div>
+              </Show>
 
-            {/* Control Card 2: Page Spread & Split */}
-            <div
-              class={`neo-stage-card ${activeStage() === "split" ? "active" : ""}`}
-              onClick={() => setActiveStage("split")}
-            >
-              <div class="stage-card-header">
-                <div class="stage-card-header-left">
-                  <div class="stage-card-badge">2</div>
-                  <div class="stage-card-title-wrap">
-                    <span class="stage-card-title">✂ Page Spread & Split</span>
-                    <span class="stage-card-desc">Single page or book dual-spread cut</span>
+              {/* STAGE 2: SPLIT PAGES */}
+              <Show when={activeStage() === "split"}>
+                <div class="stage-controls-card">
+                  <div class="card-section-label">
+                    <span>Split Mode</span>
+                    <span class="sticker-badge blue">{activePage()?.split_mode}</span>
                   </div>
-                </div>
-                <span class="sticker-badge blue">{activePage()?.split_mode}</span>
-              </div>
+                  <div class="neo-segmented-group">
+                    <button
+                      class={`neo-segment-btn ${activePage()?.split_mode === "single" ? "active" : ""}`}
+                      onClick={() => {
+                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, split_mode: "single" } : p)));
+                        refreshPreview();
+                      }}
+                    >
+                      Single Page
+                    </button>
+                    <button
+                      class={`neo-segment-btn ${activePage()?.split_mode === "two-pages" ? "active" : ""}`}
+                      onClick={() => {
+                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, split_mode: "two-pages" } : p)));
+                        refreshPreview();
+                      }}
+                    >
+                      Two-Page Spread
+                    </button>
+                  </div>
 
-              <div class="stage-card-body">
-                <div class="neo-segmented-group">
-                  <button
-                    class={`neo-segment-btn ${activePage()?.split_mode === "single" ? "active" : ""}`}
-                    onClick={() => {
-                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, split_mode: "single" } : p)));
-                      refreshPreview();
-                    }}
-                  >
-                    Single Page
-                  </button>
-                  <button
-                    class={`neo-segment-btn ${activePage()?.split_mode === "two-pages" ? "active" : ""}`}
-                    onClick={() => {
-                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, split_mode: "two-pages" } : p)));
-                      refreshPreview();
-                    }}
-                  >
-                    Two-Page Spread
-                  </button>
-                </div>
-
-                <Show when={activePage()?.split_mode === "two-pages"}>
-                  <div class="neo-slider-wrap">
-                    <div class="slider-info-row">
-                      <span class="slider-caption">Cutter Position (X)</span>
-                      <span class="slider-val-tag">
-                        {activePage()?.split_x || Math.round((previewResult()?.width || activePage()!.width) / 2)} px
-                      </span>
+                  <Show when={activePage()?.split_mode === "two-pages"}>
+                    <div class="neo-slider-wrap">
+                      <div class="slider-info-row">
+                        <span class="slider-caption">Spine Cut Position (X)</span>
+                        <span class="slider-val-tag">
+                          {activePage()?.split_x || Math.round((previewResult()?.width || activePage()!.width) / 2)} px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={100}
+                        max={previewResult()?.width || activePage()!.width || 3000}
+                        value={activePage()?.split_x || Math.round((previewResult()?.width || activePage()!.width) / 2)}
+                        class="neo-range-slider"
+                        onInput={(e) => updateSplitX(parseInt(e.currentTarget.value))}
+                      />
                     </div>
-                    <input
-                      type="range"
-                      min={100}
-                      max={previewResult()?.width || activePage()!.width || 3000}
-                      value={activePage()?.split_x || Math.round((previewResult()?.width || activePage()!.width) / 2)}
-                      class="neo-range-slider"
-                      onInput={(e) => updateSplitX(parseInt(e.currentTarget.value))}
-                    />
-                  </div>
-                </Show>
+                  </Show>
 
-                <div class="stage-action-btn-row">
                   <button class="neo-btn sm orange" onClick={handleAutoSplit}>
                     ✂ Auto-Detect Split Line (Current)
                   </button>
                 </div>
-              </div>
-            </div>
+              </Show>
 
-            {/* Control Card 3: Deskew & Alignment */}
-            <div
-              class={`neo-stage-card ${activeStage() === "deskew" ? "active" : ""}`}
-              onClick={() => setActiveStage("deskew")}
-            >
-              <div class="stage-card-header">
-                <div class="stage-card-header-left">
-                  <div class="stage-card-badge">3</div>
-                  <div class="stage-card-title-wrap">
-                    <span class="stage-card-title">📐 Deskew & Alignment</span>
-                    <span class="stage-card-desc">Straighten text lines and scan tilt</span>
-                  </div>
-                </div>
-                <span class="slider-val-tag">
-                  {activePage()?.deskew_angle.toFixed(2)}°
-                </span>
-              </div>
-
-              <div class="stage-card-body">
-                {/* AI Neural Dewarp (PagesGeomNet) */}
-                <div
-                  class={`neo-toggle-box ${activePage()?.ai_dewarp_active ? "ai-active" : ""}`}
-                  onClick={handleToggleAiDewarp}
-                >
-                  <div>
-                    <div class="toggle-title-bold" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                      <span>⚡ AI Neural Dewarp & Bounds</span>
-                      <span class="ai-tag-pill">PagesGeomNet</span>
+              {/* STAGE 3: DESKEW & ALIGNMENT */}
+              <Show when={activeStage() === "deskew"}>
+                <div class="stage-controls-card">
+                  {/* AI Neural Dewarp (PagesGeomNet) */}
+                  <div
+                    class={`neo-toggle-box ${activePage()?.ai_dewarp_active ? "ai-active" : ""}`}
+                    onClick={handleToggleAiDewarp}
+                  >
+                    <div>
+                      <div class="toggle-title-bold" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                        <span>⚡ AI Neural Dewarp & Bounds</span>
+                        <span class="sticker-badge cyan">PagesGeomNet</span>
+                      </div>
+                      <div class="toggle-sub-hint">Sub-pixel corner detection & true 2D projective homography</div>
                     </div>
-                    <div class="toggle-sub-hint">Sub-pixel corner detection & true 2D projective homography</div>
-                  </div>
-                  <div class={`neo-switch ${activePage()?.ai_dewarp_active ? "active" : ""}`}>
-                    <div class="neo-switch-knob"></div>
-                  </div>
-                </div>
-
-                <Show when={activePage()?.ai_dewarp_active}>
-                  <div class="ai-dewarp-meta-card">
-                    <div class="ai-corner-summary">
-                      <span class="ai-corner-label">Detected Paper Quad:</span>
-                      <span class="font-mono" style={{ "font-size": "11px", color: "var(--neo-cyan, #00f5ff)" }}>
-                        {activePage()?.ai_corners ? "4 Corners Extracted & Locked" : "Pending Detection"}
-                      </span>
-                    </div>
-                    <div class="batch-btn-row" style={{ "margin-top": "8px" }}>
-                      <button class="neo-btn sm cyan" onClick={handleRedetectCorners} title="Re-run PagesGeomNet corner inference">
-                        🎯 Re-Detect Corners
-                      </button>
-                      <button class="neo-btn sm" onClick={handleResetCorners} title="Reset corners to image frame bounds">
-                        ↺ Frame Quad
-                      </button>
+                    <div class={`neo-switch ${activePage()?.ai_dewarp_active ? "active" : ""}`}>
+                      <div class="neo-switch-knob"></div>
                     </div>
                   </div>
-                </Show>
 
-                <div class="neo-card-header" style={{ "margin-top": "10px" }}>
-                  <span class="neo-card-title">Fine Angle Rotation</span>
-                </div>
-                <input
-                  type="range"
-                  min="-20.0"
-                  max="20.0"
-                  step="0.05"
-                  value={activePage()?.deskew_angle || 0}
-                  class="neo-range-slider"
-                  onInput={(e) => updateDeskewAngle(parseFloat(e.currentTarget.value))}
-                />
-                <div class="neo-segmented-group">
-                  <button class="neo-segment-btn" onClick={() => updateDeskewAngle((activePage()?.deskew_angle || 0) - 0.2)}>
-                    -0.2°
-                  </button>
-                  <button class="neo-segment-btn" onClick={() => updateDeskewAngle(0)}>
-                    Reset 0°
-                  </button>
-                  <button class="neo-segment-btn" onClick={() => updateDeskewAngle((activePage()?.deskew_angle || 0) + 0.2)}>
-                    +0.2°
-                  </button>
-                </div>
+                  <Show when={activePage()?.ai_dewarp_active}>
+                    <div class="ai-dewarp-meta-card">
+                      <div class="ai-corner-summary">
+                        <span class="ai-corner-label">Detected Paper Quad:</span>
+                        <span class="font-mono" style={{ "font-size": "10.5px", color: "var(--neo-cyan)" }}>
+                          {activePage()?.ai_corners ? "4 Corners Extracted & Locked" : "Pending Detection"}
+                        </span>
+                      </div>
+                      <div class="batch-btn-row" style={{ "margin-top": "8px" }}>
+                        <button class="neo-btn sm cyan" onClick={handleRedetectCorners} title="Re-run PagesGeomNet corner inference">
+                          🎯 Re-Detect Corners
+                        </button>
+                        <button class="neo-btn sm" onClick={handleResetCorners} title="Reset corners to image frame bounds">
+                          ↺ Frame Quad
+                        </button>
+                      </div>
+                    </div>
+                  </Show>
 
-                <div class="neo-toggle-box" onClick={() => setShowDeskewGrid(!showDeskewGrid())}>
-                  <div>
-                    <div class="toggle-title-bold">Alignment Grid Overlay</div>
-                    <div class="toggle-sub-hint">Visual horizontal & vertical alignment lines</div>
+                  <div class="neo-slider-wrap" style={{ "margin-top": "6px" }}>
+                    <div class="slider-info-row">
+                      <span class="slider-caption">Fine Angle Rotation</span>
+                      <span class="slider-val-tag">{activePage()?.deskew_angle.toFixed(2)}°</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-20.0"
+                      max="20.0"
+                      step="0.05"
+                      value={activePage()?.deskew_angle || 0}
+                      class="neo-range-slider"
+                      onInput={(e) => updateDeskewAngle(parseFloat(e.currentTarget.value))}
+                    />
                   </div>
-                  <div class={`neo-switch ${showDeskewGrid() ? "active" : ""}`}>
-                    <div class="neo-switch-knob"></div>
+
+                  <div class="neo-segmented-group">
+                    <button class="neo-segment-btn" onClick={() => updateDeskewAngle((activePage()?.deskew_angle || 0) - 0.2)}>
+                      -0.2°
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => updateDeskewAngle(0)}>
+                      Reset 0°
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => updateDeskewAngle((activePage()?.deskew_angle || 0) + 0.2)}>
+                      +0.2°
+                    </button>
+                  </div>
+
+                  <div class="neo-toggle-box" onClick={() => setShowDeskewGrid(!showDeskewGrid())}>
+                    <div>
+                      <div class="toggle-title-bold">Alignment Grid Overlay</div>
+                      <div class="toggle-sub-hint">Visual horizontal & vertical alignment lines</div>
+                    </div>
+                    <div class={`neo-switch ${showDeskewGrid() ? "active" : ""}`}>
+                      <div class="neo-switch-knob"></div>
+                    </div>
+                  </div>
+
+                  <div class="batch-btn-row">
+                    <button class="neo-btn sm" onClick={handleAutoDeskew}>
+                      📐 Auto Straighten (Current)
+                    </button>
+                    <button class="neo-btn sm purple" onClick={handleBatchAutoDeskew} title="Calculates skew angle for each page individually">
+                      ✨ Straighten ALL (Per-Page)
+                    </button>
                   </div>
                 </div>
+              </Show>
 
-                <div class="batch-btn-row">
-                  <button class="neo-btn sm" onClick={handleAutoDeskew}>
-                    📐 Auto Straighten (Current)
-                  </button>
-                  <button class="neo-btn sm purple" onClick={handleBatchAutoDeskew} title="Calculates skew angle for each page individually">
-                    ✨ Straighten ALL (Per-Page)
-                  </button>
-                </div>
-              </div>
-            </div>
+              {/* STAGE 4: CONTENT BOX */}
+              <Show when={activeStage() === "content"}>
+                <div class="stage-controls-card">
+                  <div class="card-section-label">
+                    <span>Crop Presets</span>
+                  </div>
+                  <div class="neo-segmented-group">
+                    <button class="neo-segment-btn" onClick={() => applyContentPreset("full")}>
+                      100% Full
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => applyContentPreset("margin85")}>
+                      85% Margin
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => applyContentPreset("book75")}>
+                      75% Book
+                    </button>
+                  </div>
 
-            {/* Control Card 4: Content Bounding Box */}
-            <div
-              class={`neo-stage-card ${activeStage() === "content" ? "active" : ""}`}
-              onClick={() => setActiveStage("content")}
-            >
-              <div class="stage-card-header">
-                <div class="stage-card-header-left">
-                  <div class="stage-card-badge">4</div>
-                  <div class="stage-card-title-wrap">
-                    <span class="stage-card-title">⛶ Content Bounding Box</span>
-                    <span class="stage-card-desc">Interactive crop frame & margin detector</span>
+                  <Show when={activePage()?.content_box}>
+                    <div class="neo-grid-2x2">
+                      <div class="input-field-block">
+                        <span class="input-label-text">X Offset</span>
+                        <div class="neo-unit-input">
+                          <input
+                            type="number"
+                            value={activePage()!.content_box!.x}
+                            onInput={(e) => {
+                              const val = parseInt(e.currentTarget.value) || 0;
+                              setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, x: val } } : p));
+                            }}
+                          />
+                          <span class="unit-label">px</span>
+                        </div>
+                      </div>
+                      <div class="input-field-block">
+                        <span class="input-label-text">Y Offset</span>
+                        <div class="neo-unit-input">
+                          <input
+                            type="number"
+                            value={activePage()!.content_box!.y}
+                            onInput={(e) => {
+                              const val = parseInt(e.currentTarget.value) || 0;
+                              setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, y: val } } : p));
+                            }}
+                          />
+                          <span class="unit-label">px</span>
+                        </div>
+                      </div>
+                      <div class="input-field-block">
+                        <span class="input-label-text">Width</span>
+                        <div class="neo-unit-input">
+                          <input
+                            type="number"
+                            value={activePage()!.content_box!.width}
+                            onInput={(e) => {
+                              const val = parseInt(e.currentTarget.value) || 50;
+                              setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, width: val } } : p));
+                            }}
+                          />
+                          <span class="unit-label">px</span>
+                        </div>
+                      </div>
+                      <div class="input-field-block">
+                        <span class="input-label-text">Height</span>
+                        <div class="neo-unit-input">
+                          <input
+                            type="number"
+                            value={activePage()!.content_box!.height}
+                            onInput={(e) => {
+                              const val = parseInt(e.currentTarget.value) || 50;
+                              setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, height: val } } : p));
+                            }}
+                          />
+                          <span class="unit-label">px</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Show>
+
+                  <div class="batch-btn-row">
+                    <button class="neo-btn sm" onClick={handleAutoContentBox}>
+                      ⚡ Detect Box (Current)
+                    </button>
+                    <button class="neo-btn sm lime" onClick={handleBatchAutoContentBox} title="Detects unique bounding box for each page individually">
+                      ✨ Detect ALL (Per-Page)
+                    </button>
                   </div>
                 </div>
-                <Show when={activePage()?.content_box}>
-                  <span class="slider-val-tag">
-                    {activePage()!.content_box!.width}×{activePage()!.content_box!.height}
-                  </span>
-                </Show>
-              </div>
+              </Show>
 
-              <div class="stage-card-body">
-                <div class="neo-segmented-group">
-                  <button class="neo-segment-btn" onClick={() => applyContentPreset("full")}>
-                    100% Full
-                  </button>
-                  <button class="neo-segment-btn" onClick={() => applyContentPreset("margin85")}>
-                    85% Margin
-                  </button>
-                  <button class="neo-segment-btn" onClick={() => applyContentPreset("book75")}>
-                    75% Book
-                  </button>
-                </div>
-
-                <Show when={activePage()?.content_box}>
+              {/* STAGE 5: MARGINS */}
+              <Show when={activeStage() === "margins"}>
+                <div class="stage-controls-card">
+                  <div class="card-section-label">
+                    <span>Uniform Layout Padding</span>
+                  </div>
                   <div class="neo-grid-2x2">
                     <div class="input-field-block">
-                      <span class="input-label-text">X Offset</span>
+                      <span class="input-label-text">Top Margin</span>
                       <div class="neo-unit-input">
                         <input
                           type="number"
-                          value={activePage()!.content_box!.x}
+                          value={activePage()?.margins.top || 10}
                           onInput={(e) => {
-                            const val = parseInt(e.currentTarget.value) || 0;
-                            setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, x: val } } : p));
+                            const val = parseFloat(e.currentTarget.value) || 0;
+                            setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, top: val } } : p));
                           }}
                         />
-                        <span class="unit-label">px</span>
+                        <span class="unit-label">%</span>
                       </div>
                     </div>
                     <div class="input-field-block">
-                      <span class="input-label-text">Y Offset</span>
+                      <span class="input-label-text">Bottom</span>
                       <div class="neo-unit-input">
                         <input
                           type="number"
-                          value={activePage()!.content_box!.y}
+                          value={activePage()?.margins.bottom || 10}
                           onInput={(e) => {
-                            const val = parseInt(e.currentTarget.value) || 0;
-                            setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, y: val } } : p));
+                            const val = parseFloat(e.currentTarget.value) || 0;
+                            setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, bottom: val } } : p));
                           }}
                         />
-                        <span class="unit-label">px</span>
+                        <span class="unit-label">%</span>
                       </div>
                     </div>
                     <div class="input-field-block">
-                      <span class="input-label-text">Width</span>
+                      <span class="input-label-text">Left Margin</span>
                       <div class="neo-unit-input">
                         <input
                           type="number"
-                          value={activePage()!.content_box!.width}
+                          value={activePage()?.margins.left || 10}
                           onInput={(e) => {
-                            const val = parseInt(e.currentTarget.value) || 50;
-                            setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, width: val } } : p));
+                            const val = parseFloat(e.currentTarget.value) || 0;
+                            setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, left: val } } : p));
                           }}
                         />
-                        <span class="unit-label">px</span>
+                        <span class="unit-label">%</span>
                       </div>
                     </div>
                     <div class="input-field-block">
-                      <span class="input-label-text">Height</span>
+                      <span class="input-label-text">Right</span>
                       <div class="neo-unit-input">
                         <input
                           type="number"
-                          value={activePage()!.content_box!.height}
+                          value={activePage()?.margins.right || 10}
                           onInput={(e) => {
-                            const val = parseInt(e.currentTarget.value) || 50;
-                            setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, content_box: { ...p.content_box!, height: val } } : p));
+                            const val = parseFloat(e.currentTarget.value) || 0;
+                            setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, right: val } } : p));
                           }}
                         />
-                        <span class="unit-label">px</span>
+                        <span class="unit-label">%</span>
                       </div>
                     </div>
                   </div>
-                </Show>
 
-                <div class="batch-btn-row">
-                  <button class="neo-btn sm" onClick={handleAutoContentBox}>
-                    ⚡ Detect Box (Current)
-                  </button>
-                  <button class="neo-btn sm lime" onClick={handleBatchAutoContentBox} title="Detects unique bounding box for each page individually">
-                    ✨ Detect ALL (Per-Page)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Control Card 5: Page Margins */}
-            <div
-              class={`neo-stage-card ${activeStage() === "margins" ? "active" : ""}`}
-              onClick={() => setActiveStage("margins")}
-            >
-              <div class="stage-card-header">
-                <div class="stage-card-header-left">
-                  <div class="stage-card-badge">5</div>
-                  <div class="stage-card-title-wrap">
-                    <span class="stage-card-title">📏 Page Margins</span>
-                    <span class="stage-card-desc">Uniform layout padding & borders</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="stage-card-body">
-                <div class="neo-grid-2x2">
-                  <div class="input-field-block">
-                    <span class="input-label-text">Top Margin</span>
-                    <div class="neo-unit-input">
-                      <input
-                        type="number"
-                        value={activePage()?.margins.top || 10}
-                        onInput={(e) => {
-                          const val = parseFloat(e.currentTarget.value) || 0;
-                          setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, top: val } } : p));
-                        }}
-                      />
-                      <span class="unit-label">%</span>
-                    </div>
-                  </div>
-                  <div class="input-field-block">
-                    <span class="input-label-text">Bottom</span>
-                    <div class="neo-unit-input">
-                      <input
-                        type="number"
-                        value={activePage()?.margins.bottom || 10}
-                        onInput={(e) => {
-                          const val = parseFloat(e.currentTarget.value) || 0;
-                          setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, bottom: val } } : p));
-                        }}
-                      />
-                      <span class="unit-label">%</span>
-                    </div>
-                  </div>
-                  <div class="input-field-block">
-                    <span class="input-label-text">Left Margin</span>
-                    <div class="neo-unit-input">
-                      <input
-                        type="number"
-                        value={activePage()?.margins.left || 10}
-                        onInput={(e) => {
-                          const val = parseFloat(e.currentTarget.value) || 0;
-                          setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, left: val } } : p));
-                        }}
-                      />
-                      <span class="unit-label">%</span>
-                    </div>
-                  </div>
-                  <div class="input-field-block">
-                    <span class="input-label-text">Right</span>
-                    <div class="neo-unit-input">
-                      <input
-                        type="number"
-                        value={activePage()?.margins.right || 10}
-                        onInput={(e) => {
-                          const val = parseFloat(e.currentTarget.value) || 0;
-                          setPages((all) => all.map((p) => p.id === activePage()!.id ? { ...p, margins: { ...p.margins, right: val } } : p));
-                        }}
-                      />
-                      <span class="unit-label">%</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="stage-action-btn-row">
                   <button class="neo-btn sm" onClick={applyMarginsToAll}>
                     📏 Apply Margins to All Pages
                   </button>
                 </div>
-              </div>
-            </div>
+              </Show>
 
-            {/* Control Card 6: Output & Binarization */}
-            <div
-              class={`neo-stage-card ${activeStage() === "output" ? "active" : ""}`}
-              onClick={() => setActiveStage("output")}
-            >
-              <div class="stage-card-header">
-                <div class="stage-card-header-left">
-                  <div class="stage-card-badge">6</div>
-                  <div class="stage-card-title-wrap">
-                    <span class="stage-card-title">⚡ Output & Filters</span>
-                    <span class="stage-card-desc">Sauvola binarization, despeckle & dewarp</span>
-                  </div>
-                </div>
-                <span class="sticker-badge lime">{activePage()?.output_mode}</span>
-              </div>
-
-              <div class="stage-card-body">
-                <div class="neo-card-header">
-                  <span class="neo-card-title">Color Mode</span>
-                </div>
-                <div class="neo-segmented-group">
-                  <button
-                    class={`neo-segment-btn ${activePage()?.output_mode === "bw" ? "active" : ""}`}
-                    onClick={() => {
-                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "bw" } : p)));
-                      refreshPreview();
-                    }}
-                  >
-                    B/W Clean
-                  </button>
-                  <button
-                    class={`neo-segment-btn ${activePage()?.output_mode === "grayscale" ? "active" : ""}`}
-                    onClick={() => {
-                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "grayscale" } : p)));
-                      refreshPreview();
-                    }}
-                  >
-                    Grayscale
-                  </button>
-                  <button
-                    class={`neo-segment-btn ${activePage()?.output_mode === "color" ? "active" : ""}`}
-                    onClick={() => {
-                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "color" } : p)));
-                      refreshPreview();
-                    }}
-                  >
-                    Color
-                  </button>
-                  <button
-                    class={`neo-segment-btn ${activePage()?.output_mode === "magic_ai" ? "active magic-ai-tab" : ""}`}
-                    onClick={() => {
-                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "magic_ai" } : p)));
-                      refreshPreview();
-                    }}
-                  >
-                    ⚡ Magic AI
-                  </button>
-                </div>
-
-                <Show when={activePage()?.output_mode === "magic_ai"}>
-                  <div class="ai-feature-card">
-                    <div class="ai-feature-title">
-                      <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                        <span class="ai-badge-title">Pages Shine (CleanNet)</span>
-                        <span class="sticker-badge cyan">Neural Stage 2</span>
-                      </div>
-                    </div>
-                    <p class="ai-feature-desc">
-                      100% pure white paper background restoration, native text darkening, shadow scrub, and ink sharpening.
-                    </p>
-
-                    <div
-                      class={`neo-toggle-box ${isFastMode() ? "ai-active" : ""}`}
-                      onClick={() => {
-                        setIsFastMode(!isFastMode());
-                        refreshPreview();
-                      }}
-                      style={{ "margin-top": "8px" }}
-                    >
-                      <div>
-                        <div class="toggle-title-bold">⚡ Low-Power Fast Mode</div>
-                        <div class="toggle-sub-hint">384px fast-tiled inference (optimized for laptops & low-power PCs)</div>
-                      </div>
-                      <div class={`neo-switch ${isFastMode() ? "active" : ""}`}>
-                        <div class="neo-switch-knob"></div>
-                      </div>
-                    </div>
-                  </div>
-                </Show>
-
-                <Show when={activePage()?.output_mode === "bw"}>
-                  <div class="neo-card-header">
-                    <span class="neo-card-title">Binarization Method</span>
+              {/* STAGE 6: OUTPUT & FILTERS */}
+              <Show when={activeStage() === "output"}>
+                <div class="stage-controls-card">
+                  <div class="card-section-label">
+                    <span>Color & Restoration Mode</span>
                   </div>
                   <div class="neo-segmented-group">
                     <button
-                      class={`neo-segment-btn ${activePage()?.binarization_method === "sauvola" ? "active" : ""}`}
+                      class={`neo-segment-btn ${activePage()?.output_mode === "bw" ? "active" : ""}`}
                       onClick={() => {
-                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, binarization_method: "sauvola" } : p)));
+                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "bw" } : p)));
                         refreshPreview();
                       }}
                     >
-                      Sauvola (Adaptive)
+                      B/W Clean
                     </button>
                     <button
-                      class={`neo-segment-btn ${activePage()?.binarization_method === "otsu" ? "active" : ""}`}
+                      class={`neo-segment-btn ${activePage()?.output_mode === "grayscale" ? "active" : ""}`}
                       onClick={() => {
-                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, binarization_method: "otsu" } : p)));
+                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "grayscale" } : p)));
                         refreshPreview();
                       }}
                     >
-                      Otsu (Global)
+                      Grayscale
+                    </button>
+                    <button
+                      class={`neo-segment-btn ${activePage()?.output_mode === "color" ? "active" : ""}`}
+                      onClick={() => {
+                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "color" } : p)));
+                        refreshPreview();
+                      }}
+                    >
+                      Color
+                    </button>
+                    <button
+                      class={`neo-segment-btn ${activePage()?.output_mode === "magic_ai" ? "active magic-ai-tab" : ""}`}
+                      onClick={() => {
+                        setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, output_mode: "magic_ai" } : p)));
+                        refreshPreview();
+                      }}
+                    >
+                      ⚡ Magic AI
                     </button>
                   </div>
 
-                  <Show when={activePage()?.binarization_method === "sauvola"}>
-                    <div class="neo-slider-wrap">
-                      <div class="slider-info-row">
-                        <span class="slider-caption">Sauvola Sensitivity (K)</span>
-                        <span class="slider-val-tag">{activePage()?.sauvola_k.toFixed(2)}</span>
+                  <Show when={activePage()?.output_mode === "magic_ai"}>
+                    <div class="ai-feature-card">
+                      <div class="ai-feature-title">
+                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                          <span class="ai-badge-title">Pages Shine (CleanNet)</span>
+                          <span class="sticker-badge cyan">Neural Stage 2</span>
+                        </div>
                       </div>
-                      <input
-                        type="range"
-                        min="0.05"
-                        max="0.50"
-                        step="0.01"
-                        value={activePage()?.sauvola_k || 0.25}
-                        class="neo-range-slider"
-                        onInput={(e) => {
-                          const val = parseFloat(e.currentTarget.value);
-                          setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, sauvola_k: val } : p)));
-                          debouncedRefreshPreview(120);
-                        }}
-                      />
-                    </div>
+                      <p class="ai-feature-desc">
+                        100% pure white paper background restoration, native text darkening, shadow scrub, and ink sharpening.
+                      </p>
 
-                    <div class="neo-slider-wrap">
-                      <div class="slider-info-row">
-                        <span class="slider-caption">Window Radius</span>
-                        <span class="slider-val-tag">{activePage()?.sauvola_window} px</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="5"
-                        max="50"
-                        step="2"
-                        value={activePage()?.sauvola_window || 15}
-                        class="neo-range-slider"
-                        onInput={(e) => {
-                          const val = parseInt(e.currentTarget.value);
-                          setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, sauvola_window: val } : p)));
-                          debouncedRefreshPreview(120);
+                      <div
+                        class={`neo-toggle-box ${isFastMode() ? "ai-active" : ""}`}
+                        onClick={() => {
+                          setIsFastMode(!isFastMode());
+                          refreshPreview();
                         }}
-                      />
+                        style={{ "margin-top": "8px" }}
+                      >
+                        <div>
+                          <div class="toggle-title-bold">⚡ Low-Power Fast Mode</div>
+                          <div class="toggle-sub-hint">384px fast-tiled inference</div>
+                        </div>
+                        <div class={`neo-switch ${isFastMode() ? "active" : ""}`}>
+                          <div class="neo-switch-knob"></div>
+                        </div>
+                      </div>
                     </div>
                   </Show>
-                </Show>
 
-                <div
-                  class="neo-toggle-box"
-                  onClick={() => {
-                    const next = !activePage()?.despeckle;
-                    setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, despeckle: next } : p)));
-                    refreshPreview();
-                  }}
-                >
-                  <div>
-                    <div class="toggle-title-bold">Despeckle Noise Filter</div>
-                    <div class="toggle-sub-hint">Eliminate scan artifacts and dust dots</div>
+                  <Show when={activePage()?.output_mode === "bw"}>
+                    <div class="card-section-label" style={{ "margin-top": "4px" }}>
+                      <span>Binarization Algorithm</span>
+                    </div>
+                    <div class="neo-segmented-group">
+                      <button
+                        class={`neo-segment-btn ${activePage()?.binarization_method === "sauvola" ? "active" : ""}`}
+                        onClick={() => {
+                          setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, binarization_method: "sauvola" } : p)));
+                          refreshPreview();
+                        }}
+                      >
+                        Sauvola (Adaptive)
+                      </button>
+                      <button
+                        class={`neo-segment-btn ${activePage()?.binarization_method === "otsu" ? "active" : ""}`}
+                        onClick={() => {
+                          setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, binarization_method: "otsu" } : p)));
+                          refreshPreview();
+                        }}
+                      >
+                        Otsu (Global)
+                      </button>
+                    </div>
+
+                    <Show when={activePage()?.binarization_method === "sauvola"}>
+                      <div class="neo-slider-wrap">
+                        <div class="slider-info-row">
+                          <span class="slider-caption">Sauvola Sensitivity (K)</span>
+                          <span class="slider-val-tag">{activePage()?.sauvola_k.toFixed(2)}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.05"
+                          max="0.50"
+                          step="0.01"
+                          value={activePage()?.sauvola_k || 0.25}
+                          class="neo-range-slider"
+                          onInput={(e) => {
+                            const val = parseFloat(e.currentTarget.value);
+                            setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, sauvola_k: val } : p)));
+                            debouncedRefreshPreview(120);
+                          }}
+                        />
+                      </div>
+
+                      <div class="neo-slider-wrap">
+                        <div class="slider-info-row">
+                          <span class="slider-caption">Window Radius</span>
+                          <span class="slider-val-tag">{activePage()?.sauvola_window} px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="5"
+                          max="50"
+                          step="2"
+                          value={activePage()?.sauvola_window || 15}
+                          class="neo-range-slider"
+                          onInput={(e) => {
+                            const val = parseInt(e.currentTarget.value);
+                            setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, sauvola_window: val } : p)));
+                            debouncedRefreshPreview(120);
+                          }}
+                        />
+                      </div>
+                    </Show>
+                  </Show>
+
+                  <div
+                    class="neo-toggle-box"
+                    onClick={() => {
+                      const next = !activePage()?.despeckle;
+                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, despeckle: next } : p)));
+                      refreshPreview();
+                    }}
+                  >
+                    <div>
+                      <div class="toggle-title-bold">Despeckle Noise Filter</div>
+                      <div class="toggle-sub-hint">Eliminate scan artifacts and dust dots</div>
+                    </div>
+                    <div class={`neo-switch ${activePage()?.despeckle ? "active" : ""}`}>
+                      <div class="neo-switch-knob"></div>
+                    </div>
                   </div>
-                  <div class={`neo-switch ${activePage()?.despeckle ? "active" : ""}`}>
-                    <div class="neo-switch-knob"></div>
+
+                  <div
+                    class="neo-toggle-box"
+                    onClick={() => {
+                      const next = !activePage()?.dewarp;
+                      setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, dewarp: next } : p)));
+                      refreshPreview();
+                    }}
+                  >
+                    <div>
+                      <div class="toggle-title-bold">Dewarp Curvature</div>
+                      <div class="toggle-sub-hint">Flatten book binding curvature</div>
+                    </div>
+                    <div class={`neo-switch ${activePage()?.dewarp ? "active" : ""}`}>
+                      <div class="neo-switch-knob"></div>
+                    </div>
+                  </div>
+
+                  {/* Before/After Split Comparison Toggle */}
+                  <div
+                    class="neo-toggle-box"
+                    onClick={() => setShowCurtainComparison(!showCurtainComparison())}
+                  >
+                    <div>
+                      <div class="toggle-title-bold">Before / After Slider</div>
+                      <div class="toggle-sub-hint">Interactive split curtain comparison</div>
+                    </div>
+                    <div class={`neo-switch ${showCurtainComparison() ? "active" : ""}`}>
+                      <div class="neo-switch-knob"></div>
+                    </div>
+                  </div>
+
+                  <div class="batch-btn-row">
+                    <button class="neo-btn sm" onClick={refreshPreview}>
+                      ⚡ Render Output (Current)
+                    </button>
+                    <button class="neo-btn sm" onClick={applyOutputSettingsToAll}>
+                      ✨ Apply Settings to All
+                    </button>
                   </div>
                 </div>
+              </Show>
+            </div>
 
-                <div
-                  class="neo-toggle-box"
-                  onClick={() => {
-                    const next = !activePage()?.dewarp;
-                    setPages((all) => all.map((p) => (p.id === activePage()!.id ? { ...p, dewarp: next } : p)));
-                    refreshPreview();
-                  }}
-                >
-                  <div>
-                    <div class="toggle-title-bold">Dewarp Curvature</div>
-                    <div class="toggle-sub-hint">Flatten book binding curvature</div>
-                  </div>
-                  <div class={`neo-switch ${activePage()?.dewarp ? "active" : ""}`}>
-                    <div class="neo-switch-knob"></div>
-                  </div>
-                </div>
-
-                {/* Before/After Split Comparison Toggle */}
-                <div
-                  class="neo-toggle-box"
-                  onClick={() => setShowCurtainComparison(!showCurtainComparison())}
-                >
-                  <div>
-                    <div class="toggle-title-bold">Before / After Slider</div>
-                    <div class="toggle-sub-hint">Interactive split curtain comparison</div>
-                  </div>
-                  <div class={`neo-switch ${showCurtainComparison() ? "active" : ""}`}>
-                    <div class="neo-switch-knob"></div>
-                  </div>
-                </div>
-
-                <div class="batch-btn-row">
-                  <button class="neo-btn sm" onClick={refreshPreview}>
-                    ⚡ Render Output (Current)
+            {/* Quick Stage Switcher Tab Bar (Bottom of Inspector) */}
+            <div class="stage-quick-nav">
+              <For each={STAGES}>
+                {(s) => (
+                  <button
+                    class={`stage-tab-btn ${activeStage() === s.id ? "active" : ""}`}
+                    onClick={() => setActiveStage(s.id)}
+                    title={`${s.num}. ${s.name}`}
+                  >
+                    <span class="stage-tab-icon">{s.icon}</span>
+                    <span>{s.num}. {s.name.slice(0, 6)}</span>
                   </button>
-                  <button class="neo-btn sm" onClick={applyOutputSettingsToAll}>
-                    ✨ Apply Settings to All
-                  </button>
-                </div>
-              </div>
+                )}
+              </For>
+            </div>
+
+            {/* Master Actions Footer in Inspector */}
+            <div class="inspector-master-actions">
+              <button
+                class="neo-btn lime"
+                onClick={handleBatchAutoAnalyzeAll}
+                disabled={pages().length === 0 || isAnalyzing()}
+                title="Runs deskew and content box detection individually for each page"
+              >
+                ✨ Smart Auto-Analyze All Pages
+              </button>
+              <button
+                class="neo-btn purple sm"
+                onClick={startBatchProcessing}
+                disabled={pages().length === 0}
+              >
+                🚀 Export All Pages to Disk
+              </button>
             </div>
           </Show>
         </aside>
@@ -2058,21 +2105,21 @@ export default function App() {
       {/* Batch Processing Modal */}
       <Show when={showBatchModal()}>
         <div class="neo-modal-backdrop">
-          <div class="neo-modal-box">
-            <div class="neo-card-header">
-              <span class="font-heading" style={{ "font-size": "16px", "font-weight": "800" }}>
+          <div class="neo-modal-card">
+            <div class="modal-header-row">
+              <span class="modal-title-text">
                 🚀 Multithreaded Processing Engine
               </span>
               <span class="sticker-badge purple">Rayon Active</span>
             </div>
 
-            <p style={{ "font-size": "12px", "color": "var(--ink-muted)" }}>
+            <p class="modal-body-text">
               Processing pages across all available CPU cores. Sauvola binarization, deskewing, and despeckle filters are being rendered.
             </p>
 
             <div class="neo-progress-track">
               <div
-                class="neo-progress-bar"
+                class={`neo-progress-fill ${isBatchProcessing() ? "striped" : ""}`}
                 style={{ width: `${Math.min(100, Math.max(5, analysisStatus().percent))}%` }}
               ></div>
             </div>
@@ -2094,9 +2141,9 @@ export default function App() {
       {/* License & LemonSqueezy Paywall Modal */}
       <Show when={showLicenseModal()}>
         <div class="neo-modal-backdrop" onClick={() => setShowLicenseModal(false)}>
-          <div class="neo-modal-box neo-paywall-modal" onClick={(e) => e.stopPropagation()}>
-            <div class="neo-card-header">
-              <span class="font-heading" style={{ "font-size": "16px", "font-weight": "800" }}>
+          <div class="neo-modal-card neo-paywall-modal" onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header-row">
+              <span class="modal-title-text">
                 {licenseModalReason().title}
               </span>
               <span class={`sticker-badge ${isProUnlocked() ? "lime" : "coral"}`}>
@@ -2104,7 +2151,7 @@ export default function App() {
               </span>
             </div>
 
-            <p style={{ "font-size": "13px", "color": "var(--ink)", "line-height": "1.5" }}>
+            <p class="modal-body-text">
               {licenseModalReason().message}
             </p>
 
@@ -2225,10 +2272,10 @@ export default function App() {
       </Show>
 
       {/* Toast Notifications */}
-      <div class="neo-toast-box">
+      <div class="neo-toast-container">
         <For each={toasts()}>
           {(t) => (
-            <div class={`neo-toast-item ${t.type}`}>
+            <div class={`neo-toast-pill ${t.type}`}>
               <span>{t.type === "success" ? "✓" : t.type === "error" ? "⚠" : "ℹ"}</span>
               <span>{t.text}</span>
             </div>
