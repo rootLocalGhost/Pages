@@ -870,12 +870,38 @@ export default function App() {
     >
       {/* Top Header Navbar */}
       <header class="neo-header">
-        <div class="brand-row">
-          <div class="brand-icon">⚡</div>
-          <div class="brand-text-wrap">
-            <span class="brand-name">Pages</span>
-            <span class="brand-tagline">Document Restoration Studio</span>
+        <div class="brand-section">
+          <div class="brand-icon-box" title="Pages AI Restoration Engine">
+            ⚡
           </div>
+          <div>
+            <div class="brand-title">
+              Pages
+              <span class="brand-badge">STUDIO</span>
+            </div>
+            <div class="brand-subtitle">Neural Restoration & Geometry Engine</div>
+          </div>
+        </div>
+
+        {/* Interactive 6-Stage Workflow Stepper */}
+        <div class="stepper-nav">
+          <For each={STAGES}>
+            {(s, idx) => (
+              <>
+                <div
+                  class={`step-item ${activeStage() === s.id ? "active" : ""}`}
+                  onClick={() => setActiveStage(s.id)}
+                  title={`${s.num}. ${s.name}: ${s.desc}`}
+                >
+                  <span class="step-dot"></span>
+                  <span>{s.num}. {s.name}</span>
+                </div>
+                <Show when={idx() < STAGES.length - 1}>
+                  <span class="step-arrow">→</span>
+                </Show>
+              </>
+            )}
+          </For>
         </div>
 
         <div class="header-center-telemetry">
