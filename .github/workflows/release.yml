@@ -19,16 +19,12 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            cli_bin: pages-cli
-            gui_bin: pages
-            cli_archive: pages-cli-linux-x86_64.tar.gz
-            gui_archive: pages-gui-linux-x86_64.tar.gz
+            cli_asset: pages-cli-linux-x86_64.tar.gz
+            gui_asset: pages-gui-linux-x86_64.tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            cli_bin: pages-cli.exe
-            gui_bin: pages.exe
-            cli_archive: pages-cli-windows-x86_64.zip
-            gui_archive: pages-gui-windows-x86_64.zip
+            cli_asset: pages-cli.exe
+            gui_asset: Pages-Setup.exe
 
     steps:
       - name: Checkout repository
@@ -55,37 +51,53 @@ jobs:
           bun install
           bun run build
 
-      - name: Build Pages CLI & GUI Release Binaries
+      - name: Build Pages CLI & GUI (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           cargo build --release --target ${{ matrix.target }} -p pages-cli
           cargo build --release --target ${{ matrix.target }} -p pages-gui
+
+      - name: Build Pages CLI & GUI Installer (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p pages-cli
+          bun run tauri build --target ${{ matrix.target }} --bundles nsis
 
       - name: Package Release Archives (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           cd target/${{ matrix.target }}/release
-          tar -czvf ../../../${{ matrix.cli_archive }} ${{ matrix.cli_bin }} ../../../README.md ../../../LICENSE
-          tar -czvf ../../../${{ matrix.gui_archive }} ${{ matrix.gui_bin }} ../../../README.md ../../../LICENSE
+          tar -czvf ../../../${{ matrix.cli_asset }} pages-cli ../../../README.md ../../../LICENSE
+          tar -czvf ../../../${{ matrix.gui_asset }} pages ../../../README.md ../../../LICENSE
           cd ../../..
 
-      - name: Package Release Archives (Windows)
+      - name: Prepare Windows Executables (.exe)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Compress-Archive -Path target\${{ matrix.target }}\release\${{ matrix.cli_bin }}, README.md, LICENSE -DestinationPath ${{ matrix.cli_archive }}
-          Compress-Archive -Path target\${{ matrix.target }}\release\${{ matrix.gui_bin }}, README.md, LICENSE -DestinationPath ${{ matrix.gui_archive }}
+          # Copy standalone portable CLI executable (no installation required)
+          Copy-Item target\${{ matrix.target }}\release\pages-cli.exe -Destination pages-cli.exe
+
+          # Locate and copy GUI NSIS Installer .exe (installer required)
+          $nsis = Get-ChildItem -Path "target\**\bundle\nsis\*.exe" -Recurse | Select-Object -First 1
+          if (-not $nsis) {
+            Write-Error "NSIS setup installer .exe was not found in target bundle directory!"
+            exit 1
+          }
+          Write-Host "Found NSIS Installer: $($nsis.FullName)"
+          Copy-Item $nsis.FullName -Destination Pages-Setup.exe
 
       - name: Upload CLI Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.target }}
-          path: ${{ matrix.cli_archive }}
+          path: ${{ matrix.cli_asset }}
 
       - name: Upload GUI Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.target }}
-          path: ${{ matrix.gui_archive }}
+          path: ${{ matrix.gui_asset }}
 
   publish:
     name: Publish GitHub Release
