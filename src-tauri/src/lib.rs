@@ -55,7 +55,7 @@ pub struct PageItem {
     pub auto_deskew_angle: Option<f64>,
     pub content_box: Option<ContentBoxDto>,
     pub margins: MarginsDto,
-    pub output_mode: String,         // "bw", "grayscale", "color", "magic", "magic_ai"
+    pub output_mode: String, // "bw", "grayscale", "color", "magic", "magic_ai"
     pub binarization_method: String, // "sauvola", "wolf", "otsu"
     pub sauvola_k: f64,
     pub sauvola_window: u32,
@@ -165,7 +165,8 @@ fn get_system_info() -> Result<SystemInfo, String> {
 
 #[tauri::command]
 async fn set_ai_device(device: String) -> Result<SystemInfo, String> {
-    let pref: pages_core::AiDeviceChoice = device.parse().unwrap_or(pages_core::AiDeviceChoice::Auto);
+    let pref: pages_core::AiDeviceChoice =
+        device.parse().unwrap_or(pages_core::AiDeviceChoice::Auto);
     tokio::task::spawn_blocking(move || {
         let mut lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
         let engine = pages_core::PagesAiEngine::auto_load(pref).map_err(|e| e.to_string())?;
@@ -668,15 +669,18 @@ async fn generate_stage_preview(
                     let _ = get_or_init_ai(None);
                     if let Ok(lock) = AI_ENGINE.lock() {
                         if let Some(engine) = lock.as_ref() {
-                            let (orig_dyn, _, _, _) = load_working_image(&cache_dir, &page.file_path)?;
+                            let (orig_dyn, _, _, _) =
+                                load_working_image(&cache_dir, &page.file_path)?;
                             let rgb_raw = apply_orientation(orig_dyn, page.orientation).to_rgb8();
 
-                            let custom_c = page.ai_corners.map(|c| [
-                                Point2d::new(c[0][0], c[0][1]),
-                                Point2d::new(c[1][0], c[1][1]),
-                                Point2d::new(c[2][0], c[2][1]),
-                                Point2d::new(c[3][0], c[3][1]),
-                            ]);
+                            let custom_c = page.ai_corners.map(|c| {
+                                [
+                                    Point2d::new(c[0][0], c[0][1]),
+                                    Point2d::new(c[1][0], c[1][1]),
+                                    Point2d::new(c[2][0], c[2][1]),
+                                    Point2d::new(c[3][0], c[3][1]),
+                                ]
+                            });
 
                             if let Ok((dewarped, geom, detected_deg)) =
                                 engine.dewarp_page(&rgb_raw, custom_c, true, true, true)
@@ -880,25 +884,34 @@ async fn run_batch_processing(
                 let out_file = out_path.join(format!("page_{:04}.png", idx + 1));
 
                 // Check if full AI restore is requested
-                if page.output_mode == "magic_ai" || page.output_mode == "magic" || page.ai_dewarp_active {
+                if page.output_mode == "magic_ai"
+                    || page.output_mode == "magic"
+                    || page.ai_dewarp_active
+                {
                     let mut processed_rgb = oriented.to_rgb8();
 
                     if let Ok(lock) = AI_ENGINE.lock() {
                         if let Some(engine) = lock.as_ref() {
                             if page.ai_dewarp_active {
-                                let custom_c = page.ai_corners.map(|c| [
-                                    Point2d::new(c[0][0], c[0][1]),
-                                    Point2d::new(c[1][0], c[1][1]),
-                                    Point2d::new(c[2][0], c[2][1]),
-                                    Point2d::new(c[3][0], c[3][1]),
-                                ]);
-                                if let Ok((dewarped, _, _)) = engine.dewarp_page(&processed_rgb, custom_c, true, true, true) {
+                                let custom_c = page.ai_corners.map(|c| {
+                                    [
+                                        Point2d::new(c[0][0], c[0][1]),
+                                        Point2d::new(c[1][0], c[1][1]),
+                                        Point2d::new(c[2][0], c[2][1]),
+                                        Point2d::new(c[3][0], c[3][1]),
+                                    ]
+                                });
+                                if let Ok((dewarped, _, _)) =
+                                    engine.dewarp_page(&processed_rgb, custom_c, true, true, true)
+                                {
                                     processed_rgb = dewarped;
                                 }
                             }
 
                             if page.output_mode == "magic_ai" || page.output_mode == "magic" {
-                                if let Ok(cleaned) = engine.clean_page_tiled(&processed_rgb, 512, 64) {
+                                if let Ok(cleaned) =
+                                    engine.clean_page_tiled(&processed_rgb, 512, 64)
+                                {
                                     processed_rgb = cleaned;
                                 }
                             }
@@ -959,9 +972,13 @@ async fn ai_detect_corners(image_path: String) -> Result<[[f64; 2]; 4], String> 
     tokio::task::spawn_blocking(move || {
         let _ = get_or_init_ai(None);
         let lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
-        let engine = lock.as_ref().ok_or_else(|| "AI Engine not loaded".to_string())?;
+        let engine = lock
+            .as_ref()
+            .ok_or_else(|| "AI Engine not loaded".to_string())?;
 
-        let img = image::open(&image_path).map_err(|e| e.to_string())?.to_rgb8();
+        let img = image::open(&image_path)
+            .map_err(|e| e.to_string())?
+            .to_rgb8();
         let geom = engine.detect_geometry(&img).map_err(|e| e.to_string())?;
         let c = geom.corners;
         Ok([
@@ -985,17 +1002,21 @@ async fn ai_dewarp_page(
         let cache_dir = get_preview_cache_dir();
         let _ = get_or_init_ai(None);
         let lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
-        let engine = lock.as_ref().ok_or_else(|| "AI Engine not loaded".to_string())?;
+        let engine = lock
+            .as_ref()
+            .ok_or_else(|| "AI Engine not loaded".to_string())?;
 
         let img_raw = image::open(&image_path).map_err(|e| e.to_string())?;
         let oriented = apply_orientation(img_raw, orientation.unwrap_or(0)).to_rgb8();
 
-        let custom_c = corners.map(|c| [
-            Point2d::new(c[0][0], c[0][1]),
-            Point2d::new(c[1][0], c[1][1]),
-            Point2d::new(c[2][0], c[2][1]),
-            Point2d::new(c[3][0], c[3][1]),
-        ]);
+        let custom_c = corners.map(|c| {
+            [
+                Point2d::new(c[0][0], c[0][1]),
+                Point2d::new(c[1][0], c[1][1]),
+                Point2d::new(c[2][0], c[2][1]),
+                Point2d::new(c[3][0], c[3][1]),
+            ]
+        });
 
         let (dewarped, geom, skew_deg) = engine
             .dewarp_page(&oriented, custom_c, true, true, true)
@@ -1038,7 +1059,9 @@ async fn ai_restore_page(
         let cache_dir = get_preview_cache_dir();
         let _ = get_or_init_ai(None);
         let lock = AI_ENGINE.lock().map_err(|e| e.to_string())?;
-        let engine = lock.as_ref().ok_or_else(|| "AI Engine not loaded".to_string())?;
+        let engine = lock
+            .as_ref()
+            .ok_or_else(|| "AI Engine not loaded".to_string())?;
 
         let is_fast = fast.unwrap_or(false);
         let img_raw = image::open(&image_path).map_err(|e| e.to_string())?;
@@ -1056,18 +1079,22 @@ async fn ai_restore_page(
             device: pages_core::AiDeviceChoice::Auto,
         };
 
-        let (restored, report) = engine.run_pipeline(&oriented, &opts).map_err(|e| e.to_string())?;
+        let (restored, report) = engine
+            .run_pipeline(&oriented, &opts)
+            .map_err(|e| e.to_string())?;
 
         let hash_key = format!("ai_restore_{}_{:?}", hash_str(&image_path), is_fast);
         let out_preview = cache_dir.join(format!("ai_rst_{:x}.jpg", hash_str(&hash_key)));
         restored.save(&out_preview).map_err(|e| e.to_string())?;
 
-        let corners_arr = report.corners.map(|c| [
-            [c[0].x, c[0].y],
-            [c[1].x, c[1].y],
-            [c[2].x, c[2].y],
-            [c[3].x, c[3].y],
-        ]);
+        let corners_arr = report.corners.map(|c| {
+            [
+                [c[0].x, c[0].y],
+                [c[1].x, c[1].y],
+                [c[2].x, c[2].y],
+                [c[3].x, c[3].y],
+            ]
+        });
 
         Ok(StagePreviewResult {
             preview_path: out_preview.to_string_lossy().to_string(),
