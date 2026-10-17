@@ -101,6 +101,8 @@ export default function App() {
     localStorage.getItem("pages_pro_unlocked") === "true"
   );
   const [dailyUsageCount, setDailyUsageCount] = createSignal(getPagesUsage());
+  const [showSettingsModal, setShowSettingsModal] = createSignal(false);
+  const [settingsTab, setSettingsTab] = createSignal<"appearance" | "compute" | "shortcuts" | "license">("appearance");
   const [showLicenseModal, setShowLicenseModal] = createSignal(false);
   const [licenseModalReason, setLicenseModalReason] = createSignal<{
     type: "import" | "quota" | "manual";
@@ -192,6 +194,16 @@ export default function App() {
         toggleTheme();
       } else if (e.key === "0") {
         resetView();
+      } else if (e.key === "m" || e.key === "M") {
+        handleMagicAiRestore();
+      } else if (e.key === "?" || e.key === ",") {
+        setShowSettingsModal((prev) => !prev);
+      } else if (e.key === "ArrowLeft") {
+        const idx = pages().findIndex((p) => p.id === selectedPageId());
+        if (idx > 0) selectPage(pages()[idx - 1].id);
+      } else if (e.key === "ArrowRight") {
+        const idx = pages().findIndex((p) => p.id === selectedPageId());
+        if (idx >= 0 && idx < pages().length - 1) selectPage(pages()[idx + 1].id);
       }
     });
   });
@@ -922,40 +934,27 @@ export default function App() {
           </For>
         </div>
 
-        <div class="header-center-telemetry">
-          <Show when={systemInfo()?.ai_ready}>
-            <div class="neo-pill-badge ai-telemetry-pill" title="Neural Hardware Execution Provider">
-              <span class="status-dot cyan pulse"></span>
-              <span class="ai-chip-label">AI:</span>
-              <select
-                class="ai-hardware-select"
-                value={selectedAiDevice()}
-                onChange={(e) => handleDeviceChange(e.currentTarget.value)}
-              >
-                <option value="auto">⚡ Auto ({systemInfo()!.ai_hardware})</option>
-                <option value="directml">🎮 DirectML (Intel Arc / GPU)</option>
-                <option value="openvino">🔷 OpenVINO (Xe / CPU)</option>
-                <option value="cpu">💻 CPU Multithreaded</option>
-              </select>
-            </div>
-          </Show>
+        {/* Right Header Controls: Primary Import, Settings & Compute, and License Status */}
+        <div class="header-actions-row">
+          {/* PRIMARY IMPORT BUTTON */}
+          <button class="neo-btn lime" onClick={handleImportImages} title="Import image scans (PNG, JPG, TIFF, WEBP)">
+            📁 Import Scans
+          </button>
 
-          <Show when={systemInfo()}>
-            <div class="neo-pill-badge lime">
-              <span class="status-dot green"></span>
-              <span>Rayon ({systemInfo()!.cpu_cores} Cores)</span>
-            </div>
-          </Show>
+          {/* SETTINGS & COMPUTE TELEMETRY MODAL TOGGLE */}
+          <button
+            class="neo-btn icon-only sm"
+            onClick={() => setShowSettingsModal(true)}
+            title="Studio Settings, Hardware Telemetry, & Shortcuts (?)"
+          >
+            ⚙
+          </button>
 
-          <div class="neo-pill-badge blue">
-            <span>Pages:</span>
-            <span class="font-mono">{pages().length}</span>
-          </div>
-
+          {/* LICENSE / QUOTA STATUS BADGE */}
           <Show
             when={isProUnlocked()}
             fallback={
-              <div
+              <button
                 class="neo-pill-badge orange cursor-pointer"
                 onClick={() => {
                   setLicenseModalReason({
@@ -967,11 +966,11 @@ export default function App() {
                 }}
                 title="Click to view license status / upgrade"
               >
-                <span>Free: {dailyUsageCount()}/15 Today</span>
-              </div>
+                <span>Free: {dailyUsageCount()}/15</span>
+              </button>
             }
           >
-            <div
+            <button
               class="neo-pill-badge lime cursor-pointer"
               onClick={() => {
                 setLicenseModalReason({
@@ -984,34 +983,9 @@ export default function App() {
               title="Pro Developer License Active"
             >
               <span class="status-dot green"></span>
-              <span>Pro Unlocked</span>
-            </div>
+              <span>PRO</span>
+            </button>
           </Show>
-        </div>
-
-        <div class="header-actions-row">
-          <button class="neo-btn icon-only sm" onClick={toggleTheme} title="Toggle Light/Dark Theme">
-            {theme() === "light" ? "🌙" : "☀️"}
-          </button>
-
-          {/* PRIMARY IMPORT BUTTON */}
-          <button class="neo-btn lime" onClick={handleImportImages}>
-            📁 Import Scans
-          </button>
-
-          {/* 1-CLICK MAGIC AI RESTORE BUTTON */}
-          <button
-            class="neo-btn magic-ai-glow"
-            onClick={handleMagicAiRestore}
-            disabled={!activePage() || isLoading()}
-            title="1-Click Magic AI: Neural Perspective Dewarp + Pure-White Paper Restoration"
-          >
-            ⚡ Magic AI Restore
-          </button>
-
-          <button class="neo-btn purple" onClick={startBatchProcessing} disabled={pages().length === 0}>
-            🚀 Render All ({pages().length})
-          </button>
         </div>
       </header>
 
@@ -1144,6 +1118,57 @@ export default function App() {
 
         {/* Center Column: Canvas Viewport & Overlays */}
         <section class="neo-canvas-column">
+          {/* Floating Canvas Top Bar: Magic AI Superpower & Page Quick Navigation */}
+          <Show when={activePage()}>
+            <div class="canvas-floating-top-bar">
+              <div class="canvas-page-nav-pill">
+                <button
+                  class="canvas-nav-arrow-btn"
+                  onClick={() => {
+                    const idx = pages().findIndex((p) => p.id === selectedPageId());
+                    if (idx > 0) selectPage(pages()[idx - 1].id);
+                  }}
+                  disabled={pages().findIndex((p) => p.id === selectedPageId()) <= 0}
+                  title="Previous Page (←)"
+                >
+                  ‹
+                </button>
+                <span class="canvas-page-counter">
+                  Page {pages().findIndex((p) => p.id === selectedPageId()) + 1} of {pages().length}
+                </span>
+                <button
+                  class="canvas-nav-arrow-btn"
+                  onClick={() => {
+                    const idx = pages().findIndex((p) => p.id === selectedPageId());
+                    if (idx >= 0 && idx < pages().length - 1) selectPage(pages()[idx + 1].id);
+                  }}
+                  disabled={pages().findIndex((p) => p.id === selectedPageId()) >= pages().length - 1}
+                  title="Next Page (→)"
+                >
+                  ›
+                </button>
+              </div>
+
+              {/* 1-CLICK MAGIC AI RESTORE FLOATING BUTTON */}
+              <button
+                class="neo-btn magic-ai-glow"
+                onClick={handleMagicAiRestore}
+                disabled={isLoading()}
+                title="1-Click Magic AI: Neural Perspective Dewarp + Pure-White Paper Restoration (M)"
+              >
+                <span class="magic-sparkle">✨</span>
+                <span>Magic AI Restore</span>
+              </button>
+
+              <div class="canvas-meta-pill">
+                <span>{activePage()?.width} × {activePage()?.height} px</span>
+                <Show when={activePage()?.deskew_angle !== 0}>
+                  <span class="canvas-meta-subtag">{activePage()?.deskew_angle.toFixed(1)}°</span>
+                </Show>
+              </div>
+            </div>
+          </Show>
+
           {/* Floating Canvas Loading Indicator */}
           <Show when={isLoading()}>
             <div class="canvas-loading-pill">
@@ -2083,24 +2108,240 @@ export default function App() {
             {/* Master Actions Footer in Inspector */}
             <div class="inspector-master-actions">
               <button
-                class="neo-btn lime"
+                class="neo-btn purple"
+                onClick={startBatchProcessing}
+                disabled={pages().length === 0}
+                title="Multithreaded batch export to disk using Rayon CPU engine"
+              >
+                🚀 Render All Pages ({pages().length})
+              </button>
+              <button
+                class="neo-btn lime sm"
                 onClick={handleBatchAutoAnalyzeAll}
                 disabled={pages().length === 0 || isAnalyzing()}
                 title="Runs deskew and content box detection individually for each page"
               >
-                ✨ Smart Auto-Analyze All Pages
-              </button>
-              <button
-                class="neo-btn purple sm"
-                onClick={startBatchProcessing}
-                disabled={pages().length === 0}
-              >
-                🚀 Export All Pages to Disk
+                ✨ Auto-Analyze All Pages
               </button>
             </div>
           </Show>
         </aside>
       </main>
+
+      {/* Studio Settings & Compute Telemetry Modal */}
+      <Show when={showSettingsModal()}>
+        <div class="neo-modal-backdrop" onClick={() => setShowSettingsModal(false)}>
+          <div class="neo-modal-card neo-settings-modal" onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header-row">
+              <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+                <span class="stage-focal-num-badge">⚙</span>
+                <div>
+                  <span class="modal-title-text">Studio Preferences & Compute</span>
+                  <div class="stage-focal-desc">Hardware telemetry, neural engine, and appearance</div>
+                </div>
+              </div>
+              <button class="neo-btn icon-only sm" onClick={() => setShowSettingsModal(false)}>
+                ✕
+              </button>
+            </div>
+
+            {/* Settings Tab Navigation */}
+            <div class="neo-segmented-group">
+              <button
+                class={`neo-segment-btn ${settingsTab() === "appearance" ? "active" : ""}`}
+                onClick={() => setSettingsTab("appearance")}
+              >
+                🎨 Theme
+              </button>
+              <button
+                class={`neo-segment-btn ${settingsTab() === "compute" ? "active" : ""}`}
+                onClick={() => setSettingsTab("compute")}
+              >
+                ⚡ Compute
+              </button>
+              <button
+                class={`neo-segment-btn ${settingsTab() === "shortcuts" ? "active" : ""}`}
+                onClick={() => setSettingsTab("shortcuts")}
+              >
+                ⌨ Shortcuts
+              </button>
+              <button
+                class={`neo-segment-btn ${settingsTab() === "license" ? "active" : ""}`}
+                onClick={() => setSettingsTab("license")}
+              >
+                🔑 License
+              </button>
+            </div>
+
+            {/* Tab 1: Appearance & Theme */}
+            <Show when={settingsTab() === "appearance"}>
+              <div class="settings-section">
+                <div class="card-section-label">Interface Theme</div>
+                <div class="theme-picker-grid">
+                  <div
+                    class={`theme-option-card ${theme() === "light" ? "active" : ""}`}
+                    onClick={() => { if (theme() !== "light") toggleTheme(); }}
+                  >
+                    <span class="theme-icon">☀️</span>
+                    <div class="theme-title">Neo-Light</div>
+                    <div class="theme-desc">High-contrast chalk canvas with punchy lime & purple accents</div>
+                  </div>
+                  <div
+                    class={`theme-option-card ${theme() === "dark" ? "active" : ""}`}
+                    onClick={() => { if (theme() !== "dark") toggleTheme(); }}
+                  >
+                    <span class="theme-icon">🌙</span>
+                    <div class="theme-title">Neo-Dark</div>
+                    <div class="theme-desc">Deep onyx studio palette with neon indicators</div>
+                  </div>
+                </div>
+              </div>
+            </Show>
+
+            {/* Tab 2: Compute & AI Telemetry */}
+            <Show when={settingsTab() === "compute"}>
+              <div class="settings-section">
+                <div class="card-section-label">Hardware Acceleration Provider</div>
+                <div class="settings-control-box">
+                  <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+                    <div>
+                      <div class="toggle-title-bold">AI Execution Device</div>
+                      <div class="toggle-sub-hint">DirectML leverages GPU; CPU uses multithreading</div>
+                    </div>
+                    <select
+                      class="neo-select"
+                      value={selectedAiDevice()}
+                      onChange={(e) => handleDeviceChange(e.currentTarget.value)}
+                    >
+                      <option value="auto">⚡ Auto ({systemInfo()?.ai_hardware || "Default"})</option>
+                      <option value="directml">🎮 DirectML (Intel Arc / Nvidia GPU)</option>
+                      <option value="openvino">🔷 OpenVINO (Intel CPU / Xe)</option>
+                      <option value="cpu">💻 CPU Multithreaded (Rayon)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="card-section-label" style={{ "margin-top": "6px" }}>Engine Telemetry</div>
+                <div class="telemetry-grid">
+                  <div class="telemetry-card">
+                    <span class="telemetry-label">CPU Multithreading</span>
+                    <span class="telemetry-value">Rayon Active</span>
+                    <span class="telemetry-sub">{systemInfo()?.cpu_cores || 8} Logical Cores</span>
+                  </div>
+                  <div class="telemetry-card">
+                    <span class="telemetry-label">Neural Model</span>
+                    <span class="telemetry-value">PagesGeomNet</span>
+                    <span class="telemetry-sub">ONNX Runtime (0ms Quad)</span>
+                  </div>
+                  <div class="telemetry-card">
+                    <span class="telemetry-label">Active Scans</span>
+                    <span class="telemetry-value">{pages().length} Pages</span>
+                    <span class="telemetry-sub">In Current Project</span>
+                  </div>
+                  <div class="telemetry-card">
+                    <span class="telemetry-label">Pipeline Status</span>
+                    <span class="telemetry-value">{isLoading() ? "Rendering" : "Idle"}</span>
+                    <span class="telemetry-sub">Ready for compute</span>
+                  </div>
+                </div>
+              </div>
+            </Show>
+
+            {/* Tab 3: Keyboard Shortcuts Guide */}
+            <Show when={settingsTab() === "shortcuts"}>
+              <div class="settings-section">
+                <div class="card-section-label">Productivity Shortcuts</div>
+                <div class="shortcuts-grid">
+                  <div class="shortcut-item">
+                    <span class="shortcut-key">1 - 6</span>
+                    <span class="shortcut-action">Switch Pipeline Stage (Orient, Split, Dewarp, Box, Margins, Output)</span>
+                  </div>
+                  <div class="shortcut-item">
+                    <span class="shortcut-key">M</span>
+                    <span class="shortcut-action">1-Click Magic AI Dewarp & Paper Restore</span>
+                  </div>
+                  <div class="shortcut-item">
+                    <span class="shortcut-key">← / →</span>
+                    <span class="shortcut-action">Previous / Next Page</span>
+                  </div>
+                  <div class="shortcut-item">
+                    <span class="shortcut-key">R</span>
+                    <span class="shortcut-action">Rotate Page 90° Clockwise</span>
+                  </div>
+                  <div class="shortcut-item">
+                    <span class="shortcut-key">0</span>
+                    <span class="shortcut-action">Reset Canvas Zoom & Pan to Fit</span>
+                  </div>
+                  <div class="shortcut-item">
+                    <span class="shortcut-key">?</span>
+                    <span class="shortcut-action">Open Settings & Preferences</span>
+                  </div>
+                  <div class="shortcut-item">
+                    <span class="shortcut-key">Space + Drag</span>
+                    <span class="shortcut-action">Pan around high-resolution document</span>
+                  </div>
+                  <div class="shortcut-item">
+                    <span class="shortcut-key">Mouse Wheel</span>
+                    <span class="shortcut-action">Smooth zoom in / zoom out</span>
+                  </div>
+                </div>
+              </div>
+            </Show>
+
+            {/* Tab 4: License & Limits */}
+            <Show when={settingsTab() === "license"}>
+              <div class="settings-section">
+                <div class="card-section-label">Subscription & Quota</div>
+                <div class="neo-lemon-card">
+                  <span class="neo-lemon-icon">🍋</span>
+                  <div class="neo-lemon-text">
+                    <span class="neo-lemon-title">{isProUnlocked() ? "Pages Pro Activated" : "Pages Free Tier"}</span>
+                    <span class="neo-lemon-subtitle">
+                      {isProUnlocked()
+                        ? "Unlimited high-speed imports and multithreaded Rayon exports enabled."
+                        : "Free tier is limited to 5 images per import batch and 15 page processings per day."}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="neo-quota-pills-row" style={{ "margin-top": "6px" }}>
+                  <div class="neo-pill-badge blue">
+                    <span>Daily Quota:</span>
+                    <span class="font-mono">{dailyUsageCount()} / 15 Pages</span>
+                  </div>
+                  <div class="neo-pill-badge purple">
+                    <span>Import Limit:</span>
+                    <span class="font-mono">5 Images / batch</span>
+                  </div>
+                </div>
+
+                <div style={{ "margin-top": "10px" }}>
+                  <button
+                    class="neo-btn lime sm"
+                    onClick={() => {
+                      setShowSettingsModal(false);
+                      setLicenseModalReason({
+                        type: "manual",
+                        title: "Pages Pro License",
+                        message: "Enter your secret developer override code or manage your license.",
+                      });
+                      setShowLicenseModal(true);
+                    }}
+                  >
+                    🔑 Manage License / Enter Code
+                  </button>
+                </div>
+              </div>
+            </Show>
+
+            <div style={{ display: "flex", "justify-content": "flex-end", "margin-top": "8px" }}>
+              <button class="neo-btn sm" onClick={() => setShowSettingsModal(false)}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
 
       {/* Batch Processing Modal */}
       <Show when={showBatchModal()}>
