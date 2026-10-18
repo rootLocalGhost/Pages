@@ -934,13 +934,8 @@ export default function App() {
           </For>
         </div>
 
-        {/* Right Header Controls: Primary Import, Settings & Compute, and License Status */}
+        {/* Right Header Controls: Settings & Compute, and License Status */}
         <div class="header-actions-row">
-          {/* PRIMARY IMPORT BUTTON */}
-          <button class="neo-btn lime" onClick={handleImportImages} title="Import image scans (PNG, JPG, TIFF, WEBP)">
-            📁 Import Scans
-          </button>
-
           {/* SETTINGS & COMPUTE TELEMETRY MODAL TOGGLE */}
           <button
             class="neo-btn icon-only sm"
@@ -1018,13 +1013,22 @@ export default function App() {
               <span>Scans List</span>
               <span class="count-chip">{pages().length}</span>
             </div>
-            <button
-              class="neo-btn icon-only sm"
-              onClick={() => setFilmstripCollapsed(!filmstripCollapsed())}
-              title={filmstripCollapsed() ? "Expand Sidebar" : "Collapse Sidebar"}
-            >
-              {filmstripCollapsed() ? "»" : "«"}
-            </button>
+            <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+              <button
+                class="neo-btn icon-only sm lime"
+                onClick={handleImportImages}
+                title="Import additional scans (+)"
+              >
+                +
+              </button>
+              <button
+                class="neo-btn icon-only sm"
+                onClick={() => setFilmstripCollapsed(!filmstripCollapsed())}
+                title={filmstripCollapsed() ? "Expand Sidebar" : "Collapse Sidebar"}
+              >
+                {filmstripCollapsed() ? "»" : "«"}
+              </button>
+            </div>
           </div>
 
           <div class="search-box-wrap">
