@@ -66,21 +66,21 @@
 }
 
 [data-theme="dark"] {
-  /* High-Contrast Neo-Brutalist Dark Mode */
-  --bg-app: #121217;
-  --bg-surface: #1a1a23;
-  --bg-surface-elevated: #242430;
-  --bg-surface-hover: #2e2e3d;
-  --bg-card: #1a1a23;
-  --bg-input: #15151c;
-  --bg-canvas: #0b0b0f;
+  /* High-Contrast Neo-Brutalist Dark Mode with Crisp Readability */
+  --bg-app: #0e0e13;
+  --bg-surface: #171721;
+  --bg-surface-elevated: #21212e;
+  --bg-surface-hover: #2b2b3b;
+  --bg-card: #181824;
+  --bg-input: #121219;
+  --bg-canvas: #09090d;
 
-  --ink: #f4f4f5;
-  --ink-muted: #a1a1aa;
-  --ink-faint: #71717a;
-  --ink-inverse: #121217;
+  --ink: #ffffff;
+  --ink-muted: #cbd5e1;
+  --ink-faint: #94a3b8;
+  --ink-inverse: #09090b;
 
-  --border-color: #3f3f4e;
+  --border-color: #52526b;
   --shadow-hard: 4px 4px 0px #000000;
   --shadow-hard-hover: 6px 6px 0px #000000;
   --shadow-hard-active: 1px 1px 0px #000000;
@@ -88,30 +88,31 @@
   --shadow-hard-sm: 2px 2px 0px #000000;
 
   --neo-lime: #a3e635;
-  --neo-lime-hover: #84cc16;
-  --neo-lime-light: #1e3310;
+  --neo-lime-hover: #bef264;
+  --neo-lime-light: #203512;
   --neo-purple: #a78bfa;
-  --neo-purple-hover: #8b5cf6;
-  --neo-purple-light: #2e2848;
+  --neo-purple-hover: #c4b5fd;
+  --neo-purple-light: #322654;
   --neo-green: #34d399;
-  --neo-green-hover: #10b981;
-  --neo-green-light: #163628;
+  --neo-green-hover: #6ee7b7;
+  --neo-green-light: #163f2d;
   --neo-blue: #38bdf8;
-  --neo-blue-hover: #0ea5e9;
-  --neo-blue-light: #183344;
+  --neo-blue-hover: #7dd3fc;
+  --neo-blue-light: #183b54;
   --neo-coral: #fb7185;
-  --neo-coral-hover: #f43f5e;
-  --neo-coral-light: #3f1d24;
+  --neo-coral-hover: #fda4af;
+  --neo-coral-light: #4c1d28;
   --neo-orange: #fb923c;
-  --neo-orange-hover: #ea580c;
-  --neo-orange-light: #3e2213;
+  --neo-orange-hover: #fdba74;
+  --neo-orange-light: #4a2814;
   --neo-yellow: #fde047;
-  --neo-yellow-light: #352c10;
-  --neo-cyan: #00f5ff;
-  --neo-cyan-hover: #38bdf8;
-  --neo-cyan-light: #082f49;
-  --neo-cyan-glow: rgba(0, 245, 255, 0.55);
+  --neo-yellow-light: #423612;
+  --neo-cyan: #22d3ee;
+  --neo-cyan-hover: #67e8f9;
+  --neo-cyan-light: #113e54;
+  --neo-cyan-glow: rgba(34, 211, 238, 0.45);
 }
+
 
 /* ==========================================================================
    Base Reset & Typography
@@ -1595,21 +1596,21 @@ input, button, select, textarea {
   font-family: var(--font-heading);
   font-size: 0.74rem;
   font-weight: 800;
-  color: #18181b;
+  color: var(--ink);
 }
 
 .ai-badge-title {
   font-family: var(--font-heading);
   font-size: 0.82rem;
   font-weight: 800;
-  color: #18181b;
+  color: var(--ink);
 }
 
 .ai-feature-desc {
   font-size: 0.72rem;
-  color: #334155;
+  color: var(--ink-muted);
   margin-top: 4px;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 /* ==========================================================================
@@ -1792,12 +1793,12 @@ input, button, select, textarea {
   font-family: var(--font-heading);
   font-weight: 800;
   font-size: 0.85rem;
-  color: #18181b;
+  color: var(--ink);
 }
 
 .neo-lemon-subtitle {
   font-size: 0.74rem;
-  color: #52525b;
+  color: var(--ink-muted);
 }
 
 .neo-dev-unlock-section {
@@ -1832,6 +1833,10 @@ input, button, select, textarea {
   font-family: var(--font-heading);
   font-size: 0.75rem;
   font-weight: 800;
+  color: var(--ink);
+}
+
+[data-theme="light"] .neo-pill-badge {
   color: #18181b;
 }
 
@@ -1846,6 +1851,23 @@ input, button, select, textarea {
 .neo-pill-badge.lime {
   background: var(--neo-lime-light);
 }
+
+[data-theme="dark"] .neo-pill-badge.blue {
+  color: #7dd3fc;
+}
+
+[data-theme="dark"] .neo-pill-badge.purple {
+  color: #d8b4fe;
+}
+
+[data-theme="dark"] .neo-pill-badge.lime {
+  color: #bef264;
+}
+
+[data-theme="dark"] .neo-pill-badge.orange {
+  color: #fdba74;
+}
+
 
 /* ==========================================================================
    Canvas Floating Top Action Bar
@@ -2104,4 +2126,109 @@ input, button, select, textarea {
   font-weight: 600;
   color: var(--ink);
 }
+
+.neo-input::placeholder {
+  color: var(--ink-faint);
+  opacity: 0.85;
+}
+
+/* ==========================================================================
+   Dark Mode Explicit Contrast & Readability Enhancements
+   ========================================================================== */
+[data-theme="dark"] .card-section-label {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .stage-focal-desc {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .toggle-sub-hint {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .input-label-text {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .unit-label {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .shortcut-pill {
+  color: #f1f5f9;
+  background: #1e1e2d;
+  border-color: #52526b;
+}
+
+[data-theme="dark"] .shortcut-action {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .shortcut-key {
+  background: #171721;
+  color: #a3e635;
+  border-color: #52526b;
+}
+
+[data-theme="dark"] .telemetry-card {
+  background: #1e1e2b;
+  border-color: #52526b;
+}
+
+[data-theme="dark"] .telemetry-label {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .telemetry-value {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .telemetry-sub {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .theme-desc {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .theme-title {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .modal-body-text {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .empty-dropzone p {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .neo-select {
+  background: #171721;
+  color: #ffffff;
+  border-color: #52526b;
+}
+
+[data-theme="dark"] .neo-select option {
+  background: #171721;
+  color: #ffffff;
+}
+
+[data-theme="dark"] .page-metrics-text {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .brand-subtitle {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .canvas-meta-pill {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .hud-pill-readout {
+  color: #ffffff;
+}
+
 
