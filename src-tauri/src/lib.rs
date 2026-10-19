@@ -1,7 +1,7 @@
 use image::{DynamicImage, ImageReader};
 use pages_dewarp::{CylindricalSurfaceModel, DewarpCurve, DewarpRemapper};
 use pages_imageproc::{
-    binarize_otsu, binarize_sauvola, detect_content_box, rotate_binary_image,
+    binarize_otsu, binarize_sauvola, detect_content_box, enhance_magic_color, rotate_binary_image,
     ConnectedComponentLabeler, PageLayoutMode, PageSplitDetector, SkewFinder,
 };
 use pages_math::Point2d;
@@ -233,7 +233,7 @@ fn import_images(paths: Vec<String>) -> Result<Vec<PageItem>, String> {
                 auto_deskew_angle: None,
                 content_box: None,
                 margins: MarginsDto::default(),
-                output_mode: "bw".to_string(),
+                output_mode: "magic".to_string(),
                 binarization_method: "sauvola".to_string(),
                 sauvola_k: 0.25,
                 sauvola_window: 15,
@@ -631,9 +631,78 @@ async fn generate_stage_preview(
         let oriented = apply_orientation(img, page.orientation);
         let preview_img = oriented;
 
+        let render_page_image = |dest_path: &Path| -> Result<(), String> {
+            if page.output_mode == "magic_ai" {
+                let _ = get_or_init_ai(None);
+                if let Ok(lock) = AI_ENGINE.lock() {
+                    if let Some(engine) = lock.as_ref() {
+                        let rgb = preview_img.to_rgb8();
+                        if let Ok(cleaned) = engine.clean_page_tiled(&rgb, 512, 64) {
+                            return cleaned.save(dest_path).map_err(|e| e.to_string());
+                        }
+                    }
+                }
+            }
+
+            if page.output_mode == "magic" || page.output_mode == "magic_color" {
+                let rgb = preview_img.to_rgb8();
+                let magic = enhance_magic_color(&rgb);
+                magic.save(dest_path).map_err(|e| e.to_string())
+            } else if page.output_mode == "grayscale" {
+                let gray = preview_img.to_luma8();
+                gray.save(dest_path).map_err(|e| e.to_string())
+            } else if page.output_mode == "color" || page.output_mode == "original" {
+                preview_img.save(dest_path).map_err(|e| e.to_string())
+            } else {
+                let mut gray = preview_img.to_luma8();
+
+                if page.dewarp {
+                    let w = gray.width() as f64;
+                    let h = gray.height() as f64;
+                    let top_curve = DewarpCurve::new(vec![
+                        Point2d::new(0.0, 0.0),
+                        Point2d::new(w * 0.5, 12.0),
+                        Point2d::new(w, 0.0),
+                    ]);
+                    let bottom_curve = DewarpCurve::new(vec![
+                        Point2d::new(0.0, h),
+                        Point2d::new(w * 0.5, h - 12.0),
+                        Point2d::new(w, h),
+                    ]);
+                    let model = CylindricalSurfaceModel::new(
+                        top_curve,
+                        bottom_curve,
+                        gray.width(),
+                        gray.height(),
+                    );
+                    gray = DewarpRemapper::dewarp_gray(&gray, &model);
+                }
+
+                let bin = match page.binarization_method.as_str() {
+                    "otsu" => binarize_otsu(&gray, 0),
+                    _ => binarize_sauvola(&gray, page.sauvola_window, page.sauvola_k, 0),
+                };
+
+                let deskewed_bin = if page.deskew_angle.abs() > 0.001 {
+                    rotate_binary_image(&bin, page.deskew_angle)
+                } else {
+                    bin
+                };
+
+                let final_bin = if page.despeckle {
+                    ConnectedComponentLabeler::label_8_connected(&deskewed_bin).despeckle(3)
+                } else {
+                    deskewed_bin
+                };
+
+                let out_gray = final_bin.to_gray_image();
+                out_gray.save(dest_path).map_err(|e| e.to_string())
+            }
+        };
+
         match stage.as_str() {
             "orientation" => {
-                preview_img.save(&preview_path).map_err(|e| e.to_string())?;
+                render_page_image(&preview_path)?;
             }
             "split" => {
                 let gray = preview_img.to_luma8();
@@ -662,7 +731,7 @@ async fn generate_stage_preview(
                     }),
                 });
 
-                preview_img.save(&preview_path).map_err(|e| e.to_string())?;
+                render_page_image(&preview_path)?;
             }
             "deskew" => {
                 if page.ai_dewarp_active {
@@ -717,15 +786,7 @@ async fn generate_stage_preview(
                 let detected = finder.find_skew(&bin).angle_deg;
                 auto_deskew_angle = Some(detected);
 
-                let angle_to_apply = if page.deskew_angle.abs() > 0.001 {
-                    page.deskew_angle
-                } else {
-                    detected
-                };
-
-                let rotated_bin = rotate_binary_image(&bin, angle_to_apply);
-                let out_gray = rotated_bin.to_gray_image();
-                out_gray.save(&preview_path).map_err(|e| e.to_string())?;
+                render_page_image(&preview_path)?;
             }
             "content" => {
                 let gray = preview_img.to_luma8();
@@ -744,102 +805,16 @@ async fn generate_stage_preview(
                     height: (detected_box.height as f64 * scale) as i32,
                 });
 
-                let out_gray = rotated_bin.to_gray_image();
-                out_gray.save(&preview_path).map_err(|e| e.to_string())?;
+                render_page_image(&preview_path)?;
             }
             "margins" => {
-                let gray = preview_img.to_luma8();
-                let bin = binarize_sauvola(&gray, 15, 0.25, 0);
-                let rotated_bin = if page.deskew_angle.abs() > 0.001 {
-                    rotate_binary_image(&bin, page.deskew_angle)
-                } else {
-                    bin
-                };
-
-                let out_gray = rotated_bin.to_gray_image();
-                out_gray.save(&preview_path).map_err(|e| e.to_string())?;
+                render_page_image(&preview_path)?;
             }
-            "output" => {
-                if page.output_mode == "magic_ai" || page.output_mode == "magic" {
-                    let _ = get_or_init_ai(None);
-                    if let Ok(lock) = AI_ENGINE.lock() {
-                        if let Some(engine) = lock.as_ref() {
-                            let rgb = preview_img.to_rgb8();
-                            if let Ok(cleaned) = engine.clean_page_tiled(&rgb, 512, 64) {
-                                cleaned.save(&preview_path).map_err(|e| e.to_string())?;
-                                let (dev_name, _) = engine.device_info();
-                                return Ok(StagePreviewResult {
-                                    preview_path: preview_path.to_string_lossy().to_string(),
-                                    original_path: page.file_path,
-                                    width: cleaned.width(),
-                                    height: cleaned.height(),
-                                    auto_deskew_angle: None,
-                                    auto_content_box: None,
-                                    split_info: None,
-                                    ai_corners: None,
-                                    ai_device: Some(dev_name.to_string()),
-                                });
-                            }
-                        }
-                    }
-                }
-
-                let mut gray = preview_img.to_luma8();
-
-                if page.dewarp {
-                    let w = gray.width() as f64;
-                    let h = gray.height() as f64;
-                    let top_curve = DewarpCurve::new(vec![
-                        Point2d::new(0.0, 0.0),
-                        Point2d::new(w * 0.5, 12.0),
-                        Point2d::new(w, 0.0),
-                    ]);
-                    let bottom_curve = DewarpCurve::new(vec![
-                        Point2d::new(0.0, h),
-                        Point2d::new(w * 0.5, h - 12.0),
-                        Point2d::new(w, h),
-                    ]);
-                    let model = CylindricalSurfaceModel::new(
-                        top_curve,
-                        bottom_curve,
-                        gray.width(),
-                        gray.height(),
-                    );
-                    gray = DewarpRemapper::dewarp_gray(&gray, &model);
-                }
-
-                let bin = match page.binarization_method.as_str() {
-                    "otsu" => binarize_otsu(&gray, 0),
-                    _ => binarize_sauvola(&gray, page.sauvola_window, page.sauvola_k, 0),
-                };
-
-                let deskewed_bin = if page.deskew_angle.abs() > 0.001 {
-                    rotate_binary_image(&bin, page.deskew_angle)
-                } else {
-                    bin
-                };
-
-                let final_bin = if page.despeckle {
-                    ConnectedComponentLabeler::label_8_connected(&deskewed_bin).despeckle(3)
-                } else {
-                    deskewed_bin
-                };
-
-                match page.output_mode.as_str() {
-                    "grayscale" => {
-                        gray.save(&preview_path).map_err(|e| e.to_string())?;
-                    }
-                    "color" => {
-                        preview_img.save(&preview_path).map_err(|e| e.to_string())?;
-                    }
-                    _ => {
-                        let out_gray = final_bin.to_gray_image();
-                        out_gray.save(&preview_path).map_err(|e| e.to_string())?;
-                    }
-                }
+            "live" | "output" => {
+                render_page_image(&preview_path)?;
             }
             _ => {
-                preview_img.save(&preview_path).map_err(|e| e.to_string())?;
+                render_page_image(&preview_path)?;
             }
         }
 
@@ -884,10 +859,7 @@ async fn run_batch_processing(
                 let out_file = out_path.join(format!("page_{:04}.png", idx + 1));
 
                 // Check if full AI restore is requested
-                if page.output_mode == "magic_ai"
-                    || page.output_mode == "magic"
-                    || page.ai_dewarp_active
-                {
+                if page.output_mode == "magic_ai" || page.ai_dewarp_active {
                     let mut processed_rgb = oriented.to_rgb8();
 
                     if let Ok(lock) = AI_ENGINE.lock() {
@@ -908,7 +880,7 @@ async fn run_batch_processing(
                                 }
                             }
 
-                            if page.output_mode == "magic_ai" || page.output_mode == "magic" {
+                            if page.output_mode == "magic_ai" {
                                 if let Ok(cleaned) =
                                     engine.clean_page_tiled(&processed_rgb, 512, 64)
                                 {
@@ -918,7 +890,19 @@ async fn run_batch_processing(
                         }
                     }
 
+                    if page.output_mode == "magic" || page.output_mode == "magic_color" {
+                        processed_rgb = enhance_magic_color(&processed_rgb);
+                    }
+
                     processed_rgb.save(&out_file).map_err(|e| e.to_string())?;
+                } else if page.output_mode == "magic" || page.output_mode == "magic_color" {
+                    let rgb = oriented.to_rgb8();
+                    let magic = enhance_magic_color(&rgb);
+                    magic.save(&out_file).map_err(|e| e.to_string())?;
+                } else if page.output_mode == "color" || page.output_mode == "original" {
+                    oriented.save(&out_file).map_err(|e| e.to_string())?;
+                } else if page.output_mode == "grayscale" {
+                    oriented.to_luma8().save(&out_file).map_err(|e| e.to_string())?;
                 } else {
                     let gray = oriented.to_luma8();
 
