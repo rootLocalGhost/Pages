@@ -1,10 +1,13 @@
 export type Stage =
+  | "live"
   | "orientation"
   | "split"
   | "deskew"
   | "content"
   | "margins"
   | "output";
+
+export type ToolMode = "none" | "crop" | "deskew" | "split";
 
 export interface ContentBoxDto {
   x: number;
@@ -52,6 +55,7 @@ export interface PageItem {
   ai_corners?: QuadCorners | null;
   dpi: number;
   thumbnail_path?: string | null;
+  revision?: number;
 }
 
 export interface StagePreviewResult {
