@@ -15,12 +15,12 @@ import {
 import "./App.css";
 
 const STAGES: { id: Stage; num: number; name: string; desc: string; icon: string }[] = [
-  { id: "orientation", num: 1, name: "Orientation", desc: "Rotate & flip scans", icon: "↺" },
-  { id: "split", num: 2, name: "Split Pages", desc: "Dual spread cutting", icon: "✂" },
-  { id: "deskew", num: 3, name: "Deskew", desc: "Fine straighten angle", icon: "📐" },
-  { id: "content", num: 4, name: "Content Box", desc: "Per-page detect & crop", icon: "⛶" },
+  { id: "live", num: 1, name: "Studio", desc: "Instant CamScanner enhanced page", icon: "✨" },
+  { id: "content", num: 2, name: "Crop", desc: "Per-page detect & crop", icon: "⛶" },
+  { id: "deskew", num: 3, name: "Straighten", desc: "Fine straighten angle", icon: "📐" },
+  { id: "split", num: 4, name: "Split", desc: "Dual spread cutting", icon: "✂" },
   { id: "margins", num: 5, name: "Margins", desc: "Uniform layout borders", icon: "📏" },
-  { id: "output", num: 6, name: "Output", desc: "Sauvola binarize & filters", icon: "⚡" },
+  { id: "output", num: 6, name: "Tuning", desc: "Sauvola binarize & filters", icon: "⚡" },
 ];
 
 export default function App() {
@@ -38,12 +38,14 @@ export default function App() {
   // Application State
   const [pages, setPages] = createSignal<PageItem[]>([]);
   const [selectedPageId, setSelectedPageId] = createSignal<string | null>(null);
-  const [activeStage, setActiveStage] = createSignal<Stage>("orientation");
+  const [activeStage, setActiveStage] = createSignal<Stage>("live");
   const [previewResult, setPreviewResult] = createSignal<StagePreviewResult | null>(null);
   const [systemInfo, setSystemInfo] = createSignal<SystemInfo | null>(null);
   const [isLoading, setIsLoading] = createSignal(false);
   const [searchFilter, setSearchFilter] = createSignal("");
   const [filmstripCollapsed, setFilmstripCollapsed] = createSignal(false);
+  const [isPeekingOriginal, setIsPeekingOriginal] = createSignal(false);
+  const [previewRev, setPreviewRev] = createSignal(0);
 
   // Instant Display Cache (CamScanner-grade 0ms display on selection)
   const [instantPreviewSrc, setInstantPreviewSrc] = createSignal<string | null>(null);
@@ -56,7 +58,7 @@ export default function App() {
 
   // Interactive Canvas Overlays
   const [showDeskewGrid, setShowDeskewGrid] = createSignal(true);
-  const [showCurtainComparison, setShowCurtainComparison] = createSignal(true);
+  const [showCurtainComparison, setShowCurtainComparison] = createSignal(false);
   const [curtainPos, setCurtainPos] = createSignal(0.5);
   const [isDraggingCurtain, setIsDraggingCurtain] = createSignal(false);
   const [isDraggingCutLine, setIsDraggingCutLine] = createSignal(false);
@@ -183,10 +185,12 @@ export default function App() {
     window.addEventListener("keydown", (e) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      if (e.key >= "1" && e.key <= "6") {
+      if (e.key === " " || e.key === "o" || e.key === "O") {
+        if (!e.repeat) setIsPeekingOriginal(true);
+      } else if (e.key >= "1" && e.key <= "6") {
         const stageIdx = parseInt(e.key) - 1;
         if (STAGES[stageIdx]) {
-          setActiveStage(STAGES[stageIdx].id);
+          switchStage(STAGES[stageIdx].id);
         }
       } else if (e.key === "r" || e.key === "R") {
         rotatePage(90);
@@ -206,11 +210,43 @@ export default function App() {
         if (idx >= 0 && idx < pages().length - 1) selectPage(pages()[idx + 1].id);
       }
     });
+
+    window.addEventListener("keyup", (e) => {
+      if (e.key === " " || e.key === "o" || e.key === "O") {
+        setIsPeekingOriginal(false);
+      }
+    });
   });
 
   // Debounced & Thread-safe Preview Refresh
   let previewDebounceTimer: any = null;
   let activeRequestId = 0;
+
+  const switchStage = (s: Stage) => {
+    setActiveStage(s);
+    debouncedRefreshPreview(40);
+  };
+
+  const setFilterMode = async (mode: "magic" | "bw" | "grayscale" | "color" | "magic_ai") => {
+    const curr = activePage();
+    if (!curr) return;
+    setPages((prev) =>
+      prev.map((p) =>
+        p.id === curr.id
+          ? { ...p, output_mode: mode, revision: (p.revision || 0) + 1 }
+          : p
+      )
+    );
+    await refreshPreview();
+    const names = {
+      magic: "Magic Color",
+      bw: "Clean B&W",
+      grayscale: "Grayscale",
+      color: "Original Photo",
+      magic_ai: "Magic AI Neural",
+    };
+    addToast(`Filter: ${names[mode]}`, "success");
+  };
 
   const refreshPreview = async () => {
     const page = activePage();
@@ -229,6 +265,7 @@ export default function App() {
       // Only commit if this is the newest active request
       if (reqId === activeRequestId) {
         setPreviewResult(res);
+        setPreviewRev((r) => r + 1);
         setInstantPreviewSrc(null); // High-res preview loaded!
 
         // If on Content stage and content_box is not yet set, use detected content box
@@ -608,9 +645,8 @@ export default function App() {
             : p
         )
       );
-      setActiveStage("output");
-      setShowCurtainComparison(true);
-      addToast("Magic AI Restoration complete! Check the Before/After comparison.", "success");
+      switchStage("live");
+      addToast("Magic AI Restoration complete! Check the enhanced document.", "success");
     } catch (err: any) {
       addToast(`Magic AI Restore failed: ${err}`, "error");
     } finally {
@@ -920,7 +956,7 @@ export default function App() {
               <>
                 <div
                   class={`step-item ${activeStage() === s.id ? "active" : ""}`}
-                  onClick={() => setActiveStage(s.id)}
+                  onClick={() => switchStage(s.id)}
                   title={`${s.num}. ${s.name}: ${s.desc}`}
                 >
                   <span class="step-dot"></span>
@@ -1153,15 +1189,61 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 1-CLICK MAGIC AI RESTORE FLOATING BUTTON */}
+              {/* QUICK ROTATION TOOL */}
               <button
-                class="neo-btn magic-ai-glow"
-                onClick={handleMagicAiRestore}
-                disabled={isLoading()}
-                title="1-Click Magic AI: Neural Perspective Dewarp + Pure-White Paper Restoration (M)"
+                class="neo-btn sm"
+                onClick={() => rotatePage(90)}
+                title="Rotate 90° Clockwise (R)"
               >
-                <span class="magic-sparkle">✨</span>
-                <span>Magic AI Restore</span>
+                ↻ 90°
+              </button>
+
+              {/* QUICK CROP & CORNERS TOGGLE */}
+              <button
+                class={`neo-btn sm ${activeStage() === "content" ? "lime" : ""}`}
+                onClick={() => switchStage(activeStage() === "content" ? "live" : "content")}
+                title="Adjust Document Boundary & Corners (⛶)"
+              >
+                ⛶ Crop
+              </button>
+
+              {/* QUICK STRAIGHTEN TOGGLE */}
+              <button
+                class={`neo-btn sm ${activeStage() === "deskew" ? "cyan" : ""}`}
+                onClick={() => switchStage(activeStage() === "deskew" ? "live" : "deskew")}
+                title="Straighten & Align Angle (📐)"
+              >
+                📐 Deskew
+              </button>
+
+              {/* QUICK SPLIT TOGGLE */}
+              <button
+                class={`neo-btn sm ${activeStage() === "split" ? "purple" : ""}`}
+                onClick={() => switchStage(activeStage() === "split" ? "live" : "split")}
+                title="Dual Page Book Spread Splitter (✂)"
+              >
+                ✂ Split
+              </button>
+
+              {/* PEEK ORIGINAL BUTTON */}
+              <button
+                class={`neo-btn sm ${isPeekingOriginal() ? "coral" : ""}`}
+                onMouseDown={() => setIsPeekingOriginal(true)}
+                onMouseUp={() => setIsPeekingOriginal(false)}
+                onTouchStart={() => setIsPeekingOriginal(true)}
+                onTouchEnd={() => setIsPeekingOriginal(false)}
+                title="Hold or press Spacebar / 'O' to peek raw original photo"
+              >
+                👁 Peek Raw
+              </button>
+
+              {/* BEFORE / AFTER SPLIT CURTAIN */}
+              <button
+                class={`neo-btn sm ${showCurtainComparison() ? "green" : ""}`}
+                onClick={() => setShowCurtainComparison(!showCurtainComparison())}
+                title="Toggle Before/After curtain comparison slider"
+              >
+                ⇄ Curtain
               </button>
 
               <div class="canvas-meta-pill">
@@ -1225,14 +1307,18 @@ export default function App() {
                   />
                 </Show>
 
-                {/* Main Preview with Functional Before/After Curtain Split in Output Stage */}
+                {/* Main Preview with Functional Before/After Curtain Split */}
                 <Show when={previewResult()}>
                   <Show
-                    when={activeStage() === "output" && showCurtainComparison() && activePage()}
+                    when={showCurtainComparison() && activePage()}
                     fallback={
                       <img
-                        src={convertFileSrc(previewResult()!.preview_path)}
-                        alt="Stage preview"
+                        src={
+                          isPeekingOriginal()
+                            ? `${convertFileSrc(activePage()!.file_path)}?raw=1`
+                            : `${convertFileSrc(previewResult()!.preview_path)}?rev=${previewRev()}`
+                        }
+                        alt={isPeekingOriginal() ? "Original Raw Scan" : "Live Enhanced Document"}
                         class="canvas-image"
                       />
                     }
@@ -1247,7 +1333,7 @@ export default function App() {
                       />
                       <div class="curtain-label before">BEFORE (RAW)</div>
 
-                      {/* Overlay: Processed Sauvola Preview (After), Clipped by Curtain Position */}
+                      {/* Overlay: Processed Preview (After), Clipped by Curtain Position */}
                       <div
                         class="curtain-after-wrap"
                         style={{
@@ -1255,11 +1341,11 @@ export default function App() {
                         }}
                       >
                         <img
-                          src={convertFileSrc(previewResult()!.preview_path)}
+                          src={`${convertFileSrc(previewResult()!.preview_path)}?rev=${previewRev()}`}
                           alt="Processed preview (After)"
                           class="curtain-after-img"
                         />
-                        <div class="curtain-label after">AFTER (PROCESSED)</div>
+                        <div class="curtain-label after">AFTER (CLEANED)</div>
                       </div>
 
                       {/* Draggable Divider Bar */}
@@ -1473,6 +1559,56 @@ export default function App() {
             </Show>
           </div>
 
+          {/* CamScanner Floating Filter Bar */}
+          <Show when={activePage()}>
+            <div class="canvas-floating-filter-bar neo-card">
+              <button
+                class={`cam-filter-btn ${activePage()?.output_mode === "magic" ? "active" : ""}`}
+                onClick={() => setFilterMode("magic")}
+                title="CamScanner Magic Color: Pure paper white, bold text, vibrant colored pens & stamps"
+              >
+                <span class="cam-filter-icon">✨</span>
+                <span class="cam-filter-name">Magic Color</span>
+              </button>
+              <button
+                class={`cam-filter-btn ${activePage()?.output_mode === "bw" ? "active" : ""}`}
+                onClick={() => setFilterMode("bw")}
+                title="Clean B&W: Adaptive Sauvola binarization for crisp text"
+              >
+                <span class="cam-filter-icon">📄</span>
+                <span class="cam-filter-name">Clean B&W</span>
+              </button>
+              <button
+                class={`cam-filter-btn ${activePage()?.output_mode === "grayscale" ? "active" : ""}`}
+                onClick={() => setFilterMode("grayscale")}
+                title="Grayscale: Smooth photographic shading"
+              >
+                <span class="cam-filter-icon">🩶</span>
+                <span class="cam-filter-name">Grayscale</span>
+              </button>
+              <button
+                class={`cam-filter-btn ${activePage()?.output_mode === "color" ? "active" : ""}`}
+                onClick={() => setFilterMode("color")}
+                title="Original: Unprocessed raw capture"
+              >
+                <span class="cam-filter-icon">🎨</span>
+                <span class="cam-filter-name">Original</span>
+              </button>
+
+              <div class="cam-filter-sep"></div>
+
+              <button
+                class={`cam-filter-btn ai-btn ${activePage()?.output_mode === "magic_ai" ? "active" : ""}`}
+                onClick={handleMagicAiRestore}
+                disabled={isLoading()}
+                title="Magic AI: Neural perspective unwarp + shadow elimination (M)"
+              >
+                <span class="cam-filter-icon magic-sparkle">🪄</span>
+                <span class="cam-filter-name">Magic AI</span>
+              </button>
+            </div>
+          </Show>
+
           {/* Floating Canvas HUD */}
           <div class="neo-canvas-hud">
             <button class="neo-btn icon-only sm" onClick={() => setZoom((z) => Math.max(z * 0.85, 0.15))} title="Zoom Out">
@@ -1488,24 +1624,20 @@ export default function App() {
             <button class="neo-btn sm" onClick={() => { setZoom(0.7); setPan({ x: 0, y: 0 }); }} title="Fit to Screen">
               ⛶ Fit
             </button>
-            <Show when={activeStage() === "deskew"}>
-              <button
-                class={`neo-btn sm ${showDeskewGrid() ? "cyan" : ""}`}
-                onClick={() => setShowDeskewGrid(!showDeskewGrid())}
-                title="Toggle Alignment Grid"
-              >
-                Grid
-              </button>
-            </Show>
-            <Show when={activeStage() === "output"}>
-              <button
-                class={`neo-btn sm ${showCurtainComparison() ? "green" : ""}`}
-                onClick={() => setShowCurtainComparison(!showCurtainComparison())}
-                title="Toggle Before/After Curtain Split"
-              >
-                Curtain
-              </button>
-            </Show>
+            <button
+              class={`neo-btn sm ${showDeskewGrid() ? "cyan" : ""}`}
+              onClick={() => setShowDeskewGrid(!showDeskewGrid())}
+              title="Toggle Alignment Grid"
+            >
+              Grid
+            </button>
+            <button
+              class={`neo-btn sm ${showCurtainComparison() ? "green" : ""}`}
+              onClick={() => setShowCurtainComparison(!showCurtainComparison())}
+              title="Toggle Before/After Curtain Split"
+            >
+              Curtain
+            </button>
           </div>
         </section>
 
@@ -1540,6 +1672,9 @@ export default function App() {
               </div>
 
               {/* Status Readout Pill */}
+              <Show when={activeStage() === "live"}>
+                <span class="sticker-badge lime">{activePage()?.output_mode}</span>
+              </Show>
               <Show when={activeStage() === "orientation"}>
                 <span class="sticker-badge blue">{activePage()?.orientation}°</span>
               </Show>
@@ -1562,6 +1697,101 @@ export default function App() {
 
             {/* Scrollable Stage Dedicated Control Panel */}
             <div class="stage-scroll-body">
+              {/* STAGE 1: STUDIO (LIVE CAMSCANNER DASHBOARD) */}
+              <Show when={activeStage() === "live"}>
+                <div class="stage-controls-card">
+                  <div class="card-section-label">
+                    <span>Active Filter Mode</span>
+                    <span class="sticker-badge lime">{activePage()?.output_mode}</span>
+                  </div>
+                  <div class="neo-segmented-group" style={{ "grid-template-columns": "repeat(2, 1fr)" }}>
+                    <button
+                      class={`neo-segment-btn ${activePage()?.output_mode === "magic" ? "active" : ""}`}
+                      onClick={() => setFilterMode("magic")}
+                    >
+                      ✨ Magic Color
+                    </button>
+                    <button
+                      class={`neo-segment-btn ${activePage()?.output_mode === "bw" ? "active" : ""}`}
+                      onClick={() => setFilterMode("bw")}
+                    >
+                      📄 Clean B&W
+                    </button>
+                    <button
+                      class={`neo-segment-btn ${activePage()?.output_mode === "grayscale" ? "active" : ""}`}
+                      onClick={() => setFilterMode("grayscale")}
+                    >
+                      🩶 Grayscale
+                    </button>
+                    <button
+                      class={`neo-segment-btn ${activePage()?.output_mode === "color" ? "active" : ""}`}
+                      onClick={() => setFilterMode("color")}
+                    >
+                      🎨 Original
+                    </button>
+                  </div>
+
+                  <div class="card-section-label" style={{ "margin-top": "14px" }}>
+                    <span>Rotation & Geometry</span>
+                    <span class="font-mono">{activePage()?.orientation}°</span>
+                  </div>
+                  <div class="neo-segmented-group">
+                    <button class="neo-segment-btn" onClick={() => rotatePage(-90)}>
+                      ↺ -90°
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => rotatePage(180)}>
+                      ⇅ 180°
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => rotatePage(90)}>
+                      ↻ +90°
+                    </button>
+                  </div>
+
+                  <div class="card-section-label" style={{ "margin-top": "14px" }}>
+                    <span>Straighten Deskew Angle</span>
+                    <span class="font-mono">{activePage()?.deskew_angle.toFixed(1)}°</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                    <input
+                      type="range"
+                      min="-15"
+                      max="15"
+                      step="0.1"
+                      value={activePage()?.deskew_angle || 0}
+                      onInput={(e) => updateDeskewAngle(parseFloat(e.currentTarget.value))}
+                      class="neo-slider"
+                      style={{ flex: "1" }}
+                    />
+                    <button class="neo-btn sm" onClick={handleAutoDeskew} title="Auto straightens scan">
+                      ⚡ Auto
+                    </button>
+                  </div>
+
+                  <div class="card-section-label" style={{ "margin-top": "14px" }}>
+                    <span>Quick Crop Presets</span>
+                  </div>
+                  <div class="neo-segmented-group">
+                    <button class="neo-segment-btn" onClick={() => applyContentPreset("full")}>
+                      Full Scan
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => applyContentPreset("margin85")}>
+                      Normal 85%
+                    </button>
+                    <button class="neo-segment-btn" onClick={() => applyContentPreset("book75")}>
+                      Book 75%
+                    </button>
+                  </div>
+
+                  <div class="batch-btn-row" style={{ "margin-top": "16px" }}>
+                    <button class="neo-btn lime sm" onClick={handleMagicAiRestore} disabled={isLoading()}>
+                      ✨ Magic AI Restore
+                    </button>
+                    <button class="neo-btn sm" onClick={applyOutputSettingsToAll}>
+                      Apply to All Pages
+                    </button>
+                  </div>
+                </div>
+              </Show>
               {/* STAGE 1: ORIENTATION */}
               <Show when={activeStage() === "orientation"}>
                 <div class="stage-controls-card">
@@ -2099,7 +2329,7 @@ export default function App() {
                 {(s) => (
                   <button
                     class={`stage-tab-btn ${activeStage() === s.id ? "active" : ""}`}
-                    onClick={() => setActiveStage(s.id)}
+                    onClick={() => switchStage(s.id)}
                     title={`${s.num}. ${s.name}`}
                   >
                     <span class="stage-tab-icon">{s.icon}</span>
