@@ -2231,4 +2231,112 @@ input, button, select, textarea {
   color: #ffffff;
 }
 
+/* ==========================================================================
+   CamScanner Floating Filter Bar & Controls
+   ========================================================================== */
+.canvas-floating-filter-bar {
+  position: absolute;
+  bottom: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-surface);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-hard-lg);
+  z-index: 35;
+  transition: all 0.2s var(--anim-snappy);
+  pointer-events: auto;
+}
+
+.canvas-floating-filter-bar:hover {
+  box-shadow: var(--shadow-hard-hover);
+}
+
+.cam-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--bg-surface-elevated);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s var(--anim-snappy);
+  white-space: nowrap;
+}
+
+.cam-filter-btn:hover {
+  background: var(--bg-surface-hover);
+  transform: translateY(-2px);
+}
+
+.cam-filter-btn:active {
+  transform: translateY(0);
+}
+
+.cam-filter-btn.active {
+  background: var(--neo-lime);
+  color: #18181b;
+  border-color: #18181b;
+  box-shadow: 2px 2px 0px #18181b;
+  transform: translateY(-1px);
+}
+
+.cam-filter-btn.ai-btn {
+  background: var(--neo-cyan-light);
+  border-color: var(--neo-cyan);
+  color: #0369a1;
+}
+
+.cam-filter-btn.ai-btn:hover {
+  background: var(--neo-cyan);
+  color: #000000;
+}
+
+.cam-filter-btn.ai-btn.active {
+  background: var(--neo-cyan);
+  color: #000000;
+  box-shadow: 0 0 14px var(--neo-cyan-glow);
+}
+
+.cam-filter-icon {
+  font-size: 13px;
+}
+
+.cam-filter-name {
+  letter-spacing: 0.02em;
+}
+
+.cam-filter-sep {
+  width: 1.5px;
+  height: 22px;
+  background: var(--border-color);
+  opacity: 0.4;
+  margin: 0 2px;
+}
+
+[data-theme="dark"] .cam-filter-btn.active {
+  background: var(--neo-lime);
+  color: #121214;
+}
+
+[data-theme="dark"] .cam-filter-btn.ai-btn {
+  background: #082f49;
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+[data-theme="dark"] .cam-filter-btn.ai-btn.active {
+  background: #38bdf8;
+  color: #09090b;
+}
+
 
